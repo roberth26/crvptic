@@ -99,3 +99,7 @@ export const Routes = {
   CreateGame: '/create', // [...CONFIG] | [CREATE]
   Game: '/:gameCode',
 } as const;
+
+export interface GetCategoriesResponse {
+  categories: Array<string>;
+}
