@@ -74,7 +74,11 @@ const serverConfig = {
   externals: [nodeExternals()], // in order to ignore all modules in node_modules folder
   plugins: [
     new CopyPlugin({
-      patterns: [{ from: 'src/client/index.html' }],
+      patterns: [
+        { from: 'src/client/index.html' },
+        { from: 'src/client/reset.css', to: 'static' },
+        { from: 'src/client/styles.css', to: 'static' },
+      ],
     }),
   ],
   target: 'node',

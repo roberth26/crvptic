@@ -33,12 +33,13 @@ export type DecodeMethod = typeof DecodeMethod[keyof typeof DecodeMethod];
 export type Color = typeof Color[keyof typeof Color];
 
 export interface GameConfig {
-  encoderTimeLimit: TimeLimit;
-  decoderTimeLimit: TimeLimit;
-  wordCount: number;
-  bombCount: number; // virus?
+  encodeTimeLimit: number;
+  decodeTimeLimit: number;
+  secretCount: number;
+  virusCount: number;
   decodeMethod: DecodeMethod;
   allowExtraDecode: boolean;
+  categories: Array<string>;
 }
 
 export type ID = string;
@@ -64,23 +65,23 @@ export interface PlayerStats {
   wins: number;
   losses: number;
   winsAsEncoder: number;
-  encoderAvgSignalTime: number;
+  encoderAvgSecretKeyTime: number;
 }
 
-export type GameID = ID;
+export type GameCode = string;
 
 export interface Game {
-  id: GameID;
-  code: string;
+  code: GameCode;
+  config: GameConfig;
   teamIDs: Array<TeamID>;
-  words: Record<
+  secrets: Record<
     string,
     {
-      word: string;
+      secret: string;
       teamID: TeamID;
       decodeAttempt: Maybe<{
         teamID: TeamID;
-        encodedWord: string;
+        key: string;
       }>;
     }
   >;
@@ -103,3 +104,20 @@ export const Routes = {
 export interface GetCategoriesResponse {
   categories: Array<string>;
 }
+
+export interface CreateGameRequest {
+  gameConfig: GameConfig;
+}
+
+export interface CreateGameResponse {
+  gameCode: GameCode;
+}
+
+export type Event = {
+  CreateGame: {
+    type: 'CREATE_GAME';
+    payload: {
+      config: GameConfig;
+    };
+  };
+};

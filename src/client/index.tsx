@@ -6,6 +6,7 @@ import invariant from 'ts-invariant';
 import { GetCategoriesResponse, Routes } from '../common';
 import { CreateGame } from './screens/CreateGame';
 import { Index } from './screens/Index';
+import { StateContextProvider } from './StateProvider';
 
 const queryClient = new QueryClient();
 
@@ -36,7 +37,9 @@ function Root() {
   return (
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <StateContextProvider>
+          <RouterProvider router={router} />
+        </StateContextProvider>
       </QueryClientProvider>
     </React.StrictMode>
   );
