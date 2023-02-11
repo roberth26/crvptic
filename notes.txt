@@ -1,0 +1,13 @@
+spdy for http2
+
+load all words up front
+- then send indices to track words
+- meh?
+
+store to class
+- remove the interface
+- extend eventemitter?
+
+do the form data parsing in the express route instead of just before the post/put?
+
+debounce lobby publishes

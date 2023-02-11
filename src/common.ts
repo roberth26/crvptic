@@ -1,26 +1,28 @@
 export type Maybe<T> = T | undefined | null;
 
-export const MS_IN_SEC = 1000 as const;
-
 export const TimeLimit = {
-  '10s': 10000,
-  '20s': 20000,
-  '30s': 30000,
-  '1m': 60000,
-  '5m': 300000,
-  '10m': 600000,
+  '10s': 10,
+  '20s': 20,
+  '30s': 30,
+  '1m': 60,
+  '5m': 300,
+  '10m': 600,
 } as const;
 
 export type TimeLimit = typeof TimeLimit[keyof typeof TimeLimit];
 
-export const Color = [
-  'red',
-  'green',
-  'blue',
-  'yellow',
-  'purple',
-  'orange',
-] as const;
+export const Color = {
+  Blue: 'hsl(228, 79%, 69%)',
+  Red: 'hsl(1, 100%, 62%)',
+  Orange: 'hsl(20, 100%, 61%)',
+  Yellow: 'hsl(46, 100%, 50%)',
+  Pink: 'hsl(350, 100%, 73%)',
+  Purple: 'hsl(288, 76%, 69%)',
+} as const;
+
+export type TeamColor = keyof typeof Color;
+
+export type Color = typeof Color[TeamColor];
 
 export const DecodeMethod = {
   First: 'FIRST',
@@ -29,8 +31,6 @@ export const DecodeMethod = {
 } as const;
 
 export type DecodeMethod = typeof DecodeMethod[keyof typeof DecodeMethod];
-
-export type Color = typeof Color[keyof typeof Color];
 
 export interface GameConfig {
   encodeTimeLimit: number;
@@ -42,17 +42,17 @@ export interface GameConfig {
   categories: Array<string>;
 }
 
+export const defaultGameConfigWithoutCategories: GameConfig = {
+  encodeTimeLimit: TimeLimit['5m'],
+  decodeTimeLimit: TimeLimit['5m'],
+  secretCount: 8,
+  virusCount: 1,
+  decodeMethod: DecodeMethod.Majority,
+  allowExtraDecode: true,
+  categories: [], // to be filled in
+};
+
 export type ID = string;
-
-export type TeamID = ID;
-
-export interface Team {
-  id: TeamID;
-  slug: string;
-  name: string;
-  players: Array<PlayerID>;
-  color: Color;
-}
 
 export type PlayerID = ID;
 
@@ -68,56 +68,152 @@ export interface PlayerStats {
   encoderAvgSecretKeyTime: number;
 }
 
-export type GameCode = string;
+export interface Team {
+  color: TeamColor;
+  players: Array<string>;
+  encoder: Maybe<string>;
+}
 
-export interface Game {
-  code: GameCode;
+export type LobbyCode = string;
+
+export interface Lobby {
+  code: LobbyCode;
+  leader: Maybe<string>;
+  activeGame?: Maybe<Game>;
+  teams: Array<Team>;
+}
+
+export type GameID = ID;
+
+export type Game = {
+  id: GameID;
   config: GameConfig;
-  teamIDs: Array<TeamID>;
-  secrets: Record<
-    string,
-    {
-      secret: string;
-      teamID: TeamID;
-      decodeAttempt: Maybe<{
-        teamID: TeamID;
-        key: string;
-      }>;
-    }
-  >;
-}
-
-export const GameState = {
-  Pre: 'PRE',
-  Mid: 'MID',
-  Post: 'POST',
-} as const;
-
-export type GameState = typeof GameState[keyof typeof GameState];
-
-export const Routes = {
-  Index: '/', // [JOIN_GAME] | [CREATE_GAME]
-  CreateGame: '/create', // [...CONFIG] | [CREATE]
-  Game: '/:gameCode',
-} as const;
-
-export interface GetCategoriesResponse {
-  categories: Array<string>;
-}
-
-export interface CreateGameRequest {
-  gameConfig: GameConfig;
-}
-
-export interface CreateGameResponse {
-  gameCode: GameCode;
-}
-
-export type Event = {
-  CreateGame: {
-    type: 'CREATE_GAME';
-    payload: {
-      config: GameConfig;
-    };
-  };
+  state: GameState;
+  secrets: Array<Secret>;
 };
+
+export type GameState =
+  | {
+      state: 'ENCODING';
+      teamColor: TeamColor;
+    }
+  | {
+      state: 'DECODING';
+      teamColor: TeamColor;
+      signal: string;
+      secretCount: number;
+    };
+
+export type Secret = {
+  secret: string;
+  decodeAttempt?: Maybe<{
+    teamColor: TeamColor;
+    key: string;
+  }>;
+} & (
+  | // team secret
+  {
+      teamColor: TeamColor;
+    }
+  // neutral secret
+  | {}
+  // virus
+  | {
+      isVirus: true;
+    }
+);
+
+export const UIRoute = {
+  JoinCreateLobby: '/',
+  Lobby: '/:lobbyCode',
+  ConfigureGame: '/:lobbyCode/config',
+} as const;
+
+const API_ROUTE_BASE = '/api' as const;
+
+export const APIRoute = {
+  Category: `${API_ROUTE_BASE}/category`,
+  Lobby: `${API_ROUTE_BASE}/lobby/:lobbyCode?`,
+  Game: `${API_ROUTE_BASE}/game`,
+} as const;
+
+export interface CategoryGetResponse {
+  categories: Array<{ category: string; isDefault?: 1 }>;
+}
+
+export type LobbyPostRequest = {
+  playerName: string;
+};
+
+export interface LobbyPostResponse {
+  lobbyCode: LobbyCode;
+}
+
+export type LobbyPutRequest =
+  | {
+      op: 'JOIN';
+      playerName: string;
+      teamColor?: TeamColor;
+    }
+  | {
+      op: 'PROMOTE_DECODER';
+      playerName: string;
+      teamColor: TeamColor;
+    }
+  | {
+      op: 'DEMOTE_DECODER';
+      teamColor: TeamColor;
+    }
+  | {
+      op: 'LEAVE';
+      playerName: string;
+    };
+
+export interface LobbyPutResponse {
+  lobbyCode: LobbyCode;
+}
+
+export interface LobbyDeleteRequest {}
+
+export interface LobbyPutResponse {}
+
+export interface GamePostRequest {
+  lobbyCode: LobbyCode;
+  playerName: string;
+  gameConfig?: GameConfig;
+}
+
+export interface GamePostResponse {}
+
+export type GamePutRequest = {
+  lobbyCode: LobbyCode;
+  playerName: string;
+} & (
+  | {
+      op: 'ENCODE';
+      signal: string;
+      secretCount: number;
+    }
+  | {
+      op: 'DECODE';
+      signal: string;
+    }
+  | {
+      op: 'CANCEL_DECODE';
+      signal: string;
+    }
+  | {
+      op: 'SKIP_DECODE';
+    }
+  | {
+      op: 'CANCEL_SKIP_DECODE';
+    }
+);
+
+export interface GamePutResponse {}
+
+export function objectKeys<TObject extends object>(
+  object: TObject,
+): Array<keyof TObject> {
+  return Object.keys(object) as Array<keyof TObject>;
+}

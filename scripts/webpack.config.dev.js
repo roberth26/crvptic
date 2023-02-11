@@ -7,7 +7,7 @@ const clientConfig = {
   mode: 'development',
   devtool: 'inline-source-map',
   entry: {
-    client: './src/client/index.tsx',
+    client: './src/client/client.tsx',
   },
   output: {
     filename: '[name].js',
@@ -33,15 +33,20 @@ const clientConfig = {
       },
     ],
   },
+  plugins: [
+    new CopyPlugin({
+      patterns: [{ from: 'src/client/static' }],
+    }),
+  ],
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],
   },
 };
 
-const serverConfig = {
+const apiConfig = {
   mode: 'development',
   entry: {
-    server: './src/server/index.ts',
+    api: './src/api/api.ts',
   },
   output: {
     filename: '[name].js',
@@ -56,11 +61,7 @@ const serverConfig = {
           loader: 'babel-loader',
           options: {
             cacheDirectory: true,
-            presets: [
-              '@babel/preset-env',
-              '@babel/react',
-              '@babel/preset-typescript',
-            ],
+            presets: [['@babel/preset-env'], '@babel/preset-typescript'],
             plugins: ['@babel/plugin-transform-runtime'],
           },
         },
@@ -68,20 +69,11 @@ const serverConfig = {
     ],
   },
   resolve: {
-    extensions: ['.tsx', '.ts', '.js'],
+    extensions: ['.ts'],
   },
   externalsPresets: { node: true }, // in order to ignore built-in modules like path, fs, etc.
   externals: [nodeExternals()], // in order to ignore all modules in node_modules folder
-  plugins: [
-    new CopyPlugin({
-      patterns: [
-        { from: 'src/client/index.html' },
-        { from: 'src/client/reset.css', to: 'static' },
-        { from: 'src/client/styles.css', to: 'static' },
-      ],
-    }),
-  ],
   target: 'node',
 };
 
-module.exports = [clientConfig, serverConfig];
+module.exports = [clientConfig, apiConfig];

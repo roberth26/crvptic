@@ -1,0 +1,426 @@
+:root {
+  --bg-color-1-hsl: 195deg 7% 11%;
+  --bg-color-2-hsl: 202deg 10% 21%;
+  --bg-color-3-hsl: 205deg 14% 26%;
+
+  --bg-color-1: hsl(var(--bg-color-1-hsl));
+  --bg-color-2: hsl(var(--bg-color-2-hsl));
+  --bg-color-3: hsl(var(--bg-color-3-hsl));
+
+  --primary-accent-color-hsl: 46deg 100% 50%;
+  --secondary-accent-color-hsl: 31 100% 50%;
+
+  --primary-accent-color: hsl(var(--primary-accent-color-hsl));
+  --secondary-accent-color: hsl(var(--secondary-accent-color-hsl));
+
+  --primary-text-color-hsl: 203 49% 85%;
+  --accent-text-color-hsl: 180 3% 7%;
+
+  --primary-text-color: hsl(var(--primary-text-color-hsl));
+  --accent-text-color: hsl(var(--accent-text-color-hsl));
+
+  --unit-1: 4px;
+  --unit-2: calc(var(--unit-1) * 1.5);
+  --unit-3: calc(var(--unit-1) * 2);
+  --unit-4: calc(var(--unit-1) * 3);
+  --unit-5: calc(var(--unit-1) * 4);
+  --unit-6: calc(var(--unit-1) * 6);
+  --unit-7: calc(var(--unit-1) * 8);
+  --unit-8: calc(var(--unit-1) * 10);
+
+  --radius: 3px;
+
+  --font-size-1: 1.6rem;
+  --font-size-2: calc(var(--font-size-1) * 1.125);
+  --font-size-3: calc(var(--font-size-1) * 1.25);
+  --font-size-4: calc(var(--font-size-1) * 1.5);
+  --font-size-5: calc(var(--font-size-1) * 2);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 62.5%;
+  /* 1rem == 16px */
+}
+
+body {
+  background-color: var(--bg-color-1);
+  font-family: 'Source Code Pro';
+  color: var(--primary-text-color);
+  font-size: var(--font-size-1);
+  line-height: 1.5;
+  width: 100%;
+  height: 100%;
+}
+
+h2,
+h3,
+h4,
+h5 {
+  font-size: var(--font-size-4);
+  margin-bottom: var(--unit-6);
+}
+
+p {
+  margin-bottom: var(--unit-6);
+}
+
+.container {
+  display: grid;
+  grid-template-columns: minmax(auto, 1280px);
+  margin: 0 auto;
+  padding: 0 var(--unit-5);
+}
+
+button,
+[role="button"] {
+  appearance: none;
+  outline: 0;
+  line-height: 1.5;
+  padding: var(--unit-5) var(--unit-6);
+  color: var(--primary-accent-color);
+  border: 2px solid var(--primary-accent-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background-color: transparent;
+  font-size: var(--font-size-1);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  position: relative;
+}
+
+button:not(:disabled):active,
+button:not(:disabled):hover,
+[role="button"]:not(:disabled):active,
+[role="button"]:not(:disabled):hover {
+  background-color: var(--primary-accent-color);
+  color: var(--accent-text-color);
+}
+
+button:disabled,
+[role="button"]:disabled {
+  border-color: var(--bg-color-3);
+  color: var(--bg-color-3);
+  cursor: default;
+}
+
+form:invalid button,
+form:invalid [role="button"] {
+  border-color: var(--bg-color-3);
+  color: var(--bg-color-3);
+  cursor: default;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+  appearance: none;
+  border: 0;
+  padding: var(--unit-5) var(--unit-6);
+  color: var(--primary-text-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background-color: var(--bg-color-2);
+  font-size: var(--font-size-1);
+  text-decoration: none;
+  display: inline-block;
+  font-family: inherit;
+  outline: 0;
+}
+
+input[type="text"]::placeholder {
+  font-size: var(--font-size-1);
+  font-family: inherit;
+  color: var(--primary-text-color);
+  opacity: .4;
+}
+
+select[multiple] {
+  overflow-y: auto;
+}
+
+input:focus,
+select:focus {
+  background-color: var(--bg-color-3);
+}
+
+form {
+  display: grid;
+  gap: var(--unit-5);
+}
+
+.form-group {
+  display: grid;
+  gap: var(--unit-2);
+  grid-auto-rows: max-content;
+}
+
+.form-group input[type="checkbox"] {
+  justify-self: start;
+}
+
+hr {
+  width: 100%;
+  border: 0;
+  border-bottom: 2px solid var(--bg-color-2);
+  opacity: .75;
+  margin: var(--unit-2) 0;
+}
+
+@media screen and (max-width: 640px) {
+  :root {
+    --font-size-1: 1.8rem;
+  }
+
+  .container {
+    padding: 0 var(--unit-4);
+  }
+}
+
+.JoinCreateLobby {
+  display: grid;
+  grid-template-columns: minmax(auto, 360px);
+  align-content: center;
+  margin: 0 auto;
+}
+
+.ConfigureGame {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(auto, 360px));
+  gap: var(--unit-6);
+  align-content: center;
+  align-items: start;
+  justify-items: stretch;
+  margin: 0 auto;
+}
+
+.ConfigureGame_categories {
+  grid-column: 1 / 3;
+}
+
+.ConfigureGame_categories-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: var(--unit-6);
+}
+
+@media screen and (max-width: 640px) {
+  .JoinCreateLobby {
+    align-content: baseline;
+  }
+
+  .ConfigureGame {
+    align-content: baseline;
+    grid-template-columns: 1fr;
+  }
+
+  .ConfigureGame_categories-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .JoinCreateLobby {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .ConfigureGame {
+    width: 100%;
+  }
+
+  .ConfigureGame_categories-list {
+    width: 100%;
+  }
+}
+
+.Layout {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+}
+
+.Layout_header {
+  display: grid;
+  padding-top: var(--unit-5);
+  padding-bottom: var(--unit-5);
+  background-color: var(--primary-accent-color);
+}
+
+.Layout_header_content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.Layout_content {
+  padding-top: var(--unit-5);
+  padding-bottom: var(--unit-5);
+  overflow-y: auto;
+}
+
+#logo {
+  font-size: var(--font-size-1);
+  line-height: 1;
+  margin: 0;
+  color: var(--accent-text-color);
+}
+
+.LobbyMenu {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--unit-5);
+}
+
+.LobbyMenu_controls {
+  display: grid;
+  grid-template-columns: minmax(auto, 360px);
+  align-content: center;
+  margin: 0 auto;
+  gap: var(--unit-5);
+}
+
+.LobbyMenu_teams {
+  display: grid;
+  grid-template-columns: minmax(auto, 360px);
+  align-content: center;
+  margin: 0 auto;
+  gap: var(--unit-5);
+}
+
+@media screen and (max-width: 640px) {
+  .LobbyMenu {
+    grid-template-columns: 1fr;
+    grid-template-rows: max-content;
+  }
+
+  .LobbyMenu_controls {
+    order: 1;
+    align-content: baseline;
+  }
+
+  .LobbyMenu_teams {
+    order: 0;
+    align-content: baseline;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .LobbyMenu_controls {
+    grid-template-columns: 1fr;
+    grid-template-rows: max-content;
+    width: 100%;
+  }
+
+  .LobbyMenu_teams {
+    grid-template-columns: 1fr;
+    grid-template-rows: max-content;
+    width: 100%;
+  }
+}
+
+.Team {
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+
+.Team_header {
+  border-radius: 0 !important;
+  border: 0 !important;
+  justify-content: space-between !important;
+  background-color: var(--bg-color-3);
+  color: var(--primary-text-color) !important;
+  width: 100% !important;
+}
+
+.Team_header:active,
+.Team_header:hover {
+  background-color: var(--teamColor) !important;
+  color: var(--accent-text-color) !important;
+}
+
+.Team_header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: var(--unit-3);
+  background-color: var(--teamColor);
+}
+
+.Team_member {
+  position: relative;
+  padding: var(--unit-3) var(--unit-6);
+  background-color: var(--bg-color-2);
+  color: var(--primary-text-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.Team_member:nth-of-type(even) {
+  background-color: var(--bg-color-3);
+}
+
+.Team_member.leader {
+  color: var(--primary-accent-color);
+}
+
+.Team_member .encoder {
+  font-size: 2.2rem;
+}
+
+.Game {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--unit-4);
+  align-content: center;
+}
+
+.Secret {
+  justify-content: space-between;
+  background-color: var(--bg-color-3);
+  border: 0;
+  color: var(--primary-text-color) !important;
+}
+
+.Secret:not(:disabled):hover,
+.Secret:not(:disabled):active {
+  background-color: var(--teamColor) !important;
+  color: var(--accent-text-color) !important;
+}
+
+.Secret:disabled {
+  text-decoration: line-through;
+  background-color: hsl(var(--bg-color-2-hsl) / 30%) !important;
+}
+
+.Secret:disabled::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: var(--unit-3);
+  background-color: var(--teamColor);
+}
+
+@media screen and (max-width: 640px) {
+  .Game {
+    grid-template-columns: 1fr;
+  }
+}
