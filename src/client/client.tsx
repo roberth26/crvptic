@@ -21,9 +21,11 @@ import {
   API_PORT,
   type Maybe,
   LobbyPutOp,
-  GamePutRequest,
-  LobbyPostRequest,
-  LobbyPutRequest,
+  type GamePutRequest,
+  type LobbyPostRequest,
+  type LobbyPutRequest,
+  type GamePutOp,
+  type TeamColor,
 } from '../common';
 import { ConfigureGame } from './screens/ConfigureGame';
 import { JoinCreateLobby } from './screens/JoinCreateLobby';
@@ -56,12 +58,12 @@ const router = createBrowserRouter([
                   formData.get('lobbyCode') &&
                     String(formData.get('lobbyCode')),
                   {
-                    body: formData,
+                    formData,
                     signal: request.signal,
                   },
                 )
               : postLobby({
-                  body: formData,
+                  formData,
                   signal: request.signal,
                 }));
             writeStateToLocalStorage({
@@ -89,7 +91,7 @@ const router = createBrowserRouter([
         action: async ({ request }) => {
           const formData = await request.formData();
           return putGame({
-            request: {},
+            formData,
             signal: request.signal,
           });
         },
@@ -97,14 +99,11 @@ const router = createBrowserRouter([
           {
             index: true,
             element: <LobbyMenu />,
-            action: async ({ request }) => {
+            action: async ({ params: { lobbyCode }, request }) => {
+              invariant(lobbyCode, 'TODO: throw up');
               const formData = await request.formData();
-              const lobbyCode = String(formData.get('lobbyCode'));
               await postGame({
-                request: {
-                  lobbyCode: lobbyCode,
-                  playerName: String(formData.get('playerName')),
-                },
+                formData,
                 signal: request.signal,
               });
               return redirect(generatePath(UIRoute.Lobby, { lobbyCode }));
@@ -116,26 +115,11 @@ const router = createBrowserRouter([
             loader: ({ request }) => {
               return getCategories({ signal: request.signal });
             },
-            action: async ({ request }) => {
+            action: async ({ params: { lobbyCode }, request }) => {
+              invariant(lobbyCode, 'TODO: throw up');
               const formData = await request.formData();
-              const lobbyCode = String(formData.get('lobbyCode'));
               await postGame({
-                request: {
-                  lobbyCode,
-                  playerName: String(formData.get('playerName')),
-                  gameConfig: {
-                    encodeTimeLimit: Number(formData.get('encodeTimeLimit')),
-                    decodeTimeLimit: Number(formData.get('decodeTimeLimit')),
-                    secretCount: Number(formData.get('secretCount')),
-                    virusCount: Number(formData.get('virusCount')),
-                    decodeMethod: Number(
-                      formData.get('decodeMethod'),
-                    ) as DecodeMethod,
-                    allowExtraDecode:
-                      formData.get('allowExtraDecode') === 'on' ? 1 : 0,
-                    categories: formData.getAll('categories') as Array<string>,
-                  },
-                },
+                formData,
                 signal: request.signal,
               });
               return redirect(generatePath(UIRoute.Lobby, { lobbyCode }));
@@ -172,14 +156,24 @@ async function getCategories({ signal }: { signal?: AbortSignal }) {
 async function putLobby(
   lobbyCode: Maybe<LobbyCode>,
   {
-    request,
+    formData,
     signal,
   }: {
-    request: LobbyPutRequest;
+    formData: FormData;
     signal?: AbortSignal;
   },
 ): Promise<LobbyPutResponse> {
   invariant(lobbyCode, 'TODO: explode here');
+  const op = formData.get('op');
+  invariant(op, 'TODO: blow up');
+  const playerName = formData.get('playerName');
+  invariant(playerName, 'TODO: blow up');
+  const teamColor = formData.get('teamColor');
+  const request: LobbyPutRequest = {
+    op: Number(op) as LobbyPutOp,
+    playerName: String(playerName),
+    ...(teamColor && { teamColor: String(teamColor) as TeamColor }),
+  };
   const url = new URL(
     generatePath(APIRoute.Lobby, { lobbyCode }),
     location.href,
@@ -196,12 +190,17 @@ async function putLobby(
 }
 
 async function postLobby({
-  request,
+  formData,
   signal,
 }: {
-  request: LobbyPostRequest;
+  formData: FormData;
   signal?: AbortSignal;
 }): Promise<LobbyPostResponse> {
+  const playerName = formData.get('playerName');
+  invariant(playerName, 'TODO: blow up');
+  const request: LobbyPostRequest = {
+    playerName: String(playerName),
+  };
   const url = new URL(generatePath(APIRoute.Lobby), location.href);
   url.port = API_PORT;
   return fetch(url, {
@@ -238,12 +237,46 @@ async function connectLobby(
 }
 
 async function postGame({
-  request,
+  formData,
   signal,
 }: {
-  request: GamePostRequest;
+  formData: FormData;
   signal?: AbortSignal;
 }): Promise<GamePostResponse> {
+  const lobbyCode = formData.get('lobbyCode');
+  invariant(lobbyCode, 'TODO: blow up');
+  const playerName = formData.get('playerName');
+  invariant(playerName, 'TODO: blow up');
+  const encodeTimeLimit = formData.get('encodeTimeLimit');
+  const decodeTimeLimit = formData.get('decodeTimeLimit');
+  const secretCount = formData.get('secretCount');
+  const virusCount = formData.get('virusCount');
+  const decodeMethod = formData.get('decodeMethod');
+  const allowExtraDecode = formData.get('allowExtraDecode');
+  const categories = formData.get('categories');
+  const request: GamePostRequest = {
+    lobbyCode: String(lobbyCode),
+    playerName: String(playerName),
+    gameConfig: {
+      ...(encodeTimeLimit != null && {
+        encodeTimeLimit: Number(encodeTimeLimit),
+      }),
+      ...(decodeTimeLimit != null && {
+        decodeTimeLimit: Number(decodeTimeLimit),
+      }),
+      ...(secretCount != null && { secretCount: Number(secretCount) }),
+      ...(virusCount != null && { virusCount: Number(virusCount) }),
+      ...(decodeMethod != null && {
+        decodeMethod: Number(decodeMethod) as DecodeMethod,
+      }),
+      ...(allowExtraDecode != null && {
+        allowExtraDecode: allowExtraDecode === 'on' ? 1 : 0,
+      }),
+      ...(categories != null && {
+        categories: formData.getAll('categories') as Array<string>,
+      }),
+    },
+  };
   const url = new URL(APIRoute.Game, location.href);
   url.port = API_PORT;
   return fetch(url, {
@@ -257,12 +290,31 @@ async function postGame({
 }
 
 async function putGame({
-  request,
-  signal,
+  formData,
+  signal: abortSignal,
 }: {
-  request: GamePutRequest;
+  formData: FormData;
   signal?: AbortSignal;
 }): Promise<GamePutResponse> {
+  const lobbyCode = formData.get('lobbyCode');
+  invariant(lobbyCode, 'TODO: blow up');
+  const playerName = formData.get('playerName');
+  invariant(playerName, 'TODO: blow up here');
+  const op = formData.get('op');
+  invariant(op, 'TODO: blow up');
+  const signal = formData.get('signal');
+  const secretCount = formData.get('secretCount');
+  const secret = formData.get('secret');
+  // TODO:
+  // @ts-ignore
+  const request: GamePutRequest = {
+    lobbyCode: String(lobbyCode),
+    playerName: String(playerName),
+    op: Number(op) as GamePutOp,
+    ...(signal && { signal: String(signal) }),
+    ...(secretCount && { secretCount: Number(secretCount) }),
+    ...(secret && { secret: String(signal) }),
+  };
   const url = new URL(APIRoute.Game, location.href);
   url.port = API_PORT;
   return fetch(url, {
@@ -271,6 +323,6 @@ async function putGame({
     headers: {
       'Content-Type': 'application/json',
     },
-    signal,
+    signal: abortSignal,
   }).then<GamePostResponse>(res => res.json());
 }

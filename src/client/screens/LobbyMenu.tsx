@@ -12,6 +12,7 @@ import {
   type LobbyPutRequest,
   APIRoute,
   API_PORT,
+  LobbyPutOp,
 } from '../../common';
 import { useLobby } from './Lobby';
 
@@ -85,19 +86,22 @@ export function LobbyMenu() {
             lobby={lobby}
             playerName={playerName}
             onJoin={() => {
-              putLobby({ op: 'JOIN', playerName, teamColor: team.color });
-            }}
-            onEncoderPromote={() => {
               putLobby({
-                op: 'PROMOTE_DECODER',
+                op: LobbyPutOp.Join,
                 playerName,
                 teamColor: team.color,
               });
             }}
+            onEncoderPromote={() => {
+              putLobby({
+                op: LobbyPutOp.PromoteDecoder,
+                playerName,
+              });
+            }}
             onEncoderDemote={() => {
               putLobby({
-                op: 'DEMOTE_DECODER',
-                teamColor: team.color,
+                op: LobbyPutOp.DemoteEncoder,
+                playerName,
               });
             }}
           />

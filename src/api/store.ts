@@ -157,10 +157,11 @@ export function createStore() {
     return lobby;
   };
 
-  const startGame = (
-    lobbyCode: LobbyCode,
-    gameConfig: GameConfig = DEFAULT_GAME_CONFIG,
-  ) => {
+  const startGame = (lobbyCode: LobbyCode, config?: Partial<GameConfig>) => {
+    const gameConfig = {
+      ...DEFAULT_GAME_CONFIG,
+      ...config,
+    };
     const lobby = state.lobbiesByCode[lobbyCode];
     invariant(lobby != null, `'${lobbyCode}' missing in lobbiesByCode`);
     const teams = lobby.teams.filter(team => team.players.length);

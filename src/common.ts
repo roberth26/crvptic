@@ -196,7 +196,7 @@ export interface LobbyPutResponse {}
 export interface GamePostRequest {
   lobbyCode: LobbyCode;
   playerName: string;
-  gameConfig?: GameConfig;
+  gameConfig?: Partial<GameConfig>;
 }
 
 export interface GamePostResponse {}
