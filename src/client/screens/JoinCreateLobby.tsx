@@ -34,11 +34,11 @@ export function JoinCreateLobby() {
           pattern="[A-Za-z]{4}"
         />
       </label>
-      <button name="op" value={LobbyPutOp.Join}>
+      <button name="op" value={LobbyPutOp.Join} className="bordered">
         Join lobby
       </button>
       <hr />
-      <button name="op" value={-1}>
+      <button name="op" value={-1} className="bordered">
         Create lobby
       </button>
     </Form>

@@ -18,25 +18,40 @@ export function Game() {
   const game = lobby.activeGame;
   invariant(game != null, 'game not found');
   invariant(playerName, 'playerName empty or nullish');
+  const playerTeam = lobby.teams.find(team =>
+    team.players.includes(playerName),
+  );
+  invariant(playerTeam, 'TODO: blow up');
+  const isEncoder =
+    playerTeam.color === game.encodingTeamColor &&
+    playerName === playerTeam.encoder;
 
   return (
-    <Form className="Game" method="put">
-      <input hidden={true} name="lobbyCode" value={lobbyCode} readOnly={true} />
-      <input
-        hidden={true}
-        name="playerName"
-        value={playerName}
-        readOnly={true}
-      />
-      {game.secrets.map(secret => (
-        <Secret
-          key={secret.value}
-          secret={secret}
-          lobby={lobby}
-          playerName={playerName}
+    <div className="Game">
+      <Form className="Game_secrets" method="put">
+        <input
+          hidden={true}
+          name="lobbyCode"
+          value={lobbyCode}
+          readOnly={true}
         />
-      ))}
-    </Form>
+        <input
+          hidden={true}
+          name="playerName"
+          value={playerName}
+          readOnly={true}
+        />
+        {game.secrets.map(secret => (
+          <Secret
+            key={secret.value}
+            secret={secret}
+            lobby={lobby}
+            playerName={playerName}
+          />
+        ))}
+      </Form>
+      {isEncoder && <Encoder />}
+    </div>
   );
 }
 
@@ -57,9 +72,9 @@ function Secret({
   invariant(playerTeam, 'TODO: blow up');
   const playerTeamColor = playerTeam.color;
   invariant(playerTeamColor, 'playerTeamColorName not found');
-  const canDecode =
+  const isEncoder =
     playerTeamColor === game.encodingTeamColor &&
-    playerName !== playerTeam.encoder;
+    playerName === playerTeam.encoder;
   const isDecoded = secret.isDecoded ?? false;
   const isDecoding =
     secret.decodeAttempt?.players.includes(playerName) ?? false;
@@ -84,11 +99,39 @@ function Secret({
           '--teamColor':
             isDecoded && secretColor ? secretColor : Color[playerTeamColor],
         }}
-        disabled={!canDecode || Boolean(isDecoded)}
+        disabled={isEncoder || Boolean(isDecoded)}
       >
         <span>{secret.value}</span>
         {Boolean(playerCount) && <span>({playerCount})</span>}
       </button>
     </>
+  );
+}
+
+function Encoder() {
+  return (
+    <Form className="Encoder" method="put">
+      <label className="form-group">
+        Secret key:
+        <input
+          name="signal"
+          type="text"
+          placeholder="signal"
+          pattern="[^\s]+"
+        />
+      </label>
+      <label className="form-group">
+        Secret count:
+        <input
+          name="secretCount"
+          type="number"
+          defaultValue={2}
+          min={0}
+          max={16}
+          step={1}
+        />
+      </label>
+      <button className="bordered">Encode</button>
+    </Form>
   );
 }

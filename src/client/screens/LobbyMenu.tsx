@@ -68,11 +68,12 @@ export function LobbyMenu() {
             value={playerName}
             readOnly={true}
           />
-          <button>Start game</button>
+          <button className="bordered">Start game</button>
           <hr />
           <Link
             role="button"
             to={generatePath(UIRoute.ConfigureGame, { lobbyCode })}
+            className="bordered"
           >
             Configure custom game
           </Link>
