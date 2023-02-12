@@ -25,9 +25,9 @@ export type TeamColor = keyof typeof Color;
 export type Color = typeof Color[TeamColor];
 
 export const DecodeMethod = {
-  First: 'FIRST',
-  All: 'ALL',
-  Majority: 'MAJORITY',
+  First: 0,
+  All: 1,
+  Majority: 2,
 } as const;
 
 export type DecodeMethod = typeof DecodeMethod[keyof typeof DecodeMethod];
@@ -38,7 +38,7 @@ export interface GameConfig {
   secretCount: number;
   virusCount: number;
   decodeMethod: DecodeMethod;
-  allowExtraDecode: boolean;
+  allowExtraDecode: 0 | 1;
   categories: Array<string>;
 }
 
@@ -48,7 +48,7 @@ export const defaultGameConfigWithoutCategories: GameConfig = {
   secretCount: 8,
   virusCount: 1,
   decodeMethod: DecodeMethod.Majority,
-  allowExtraDecode: true,
+  allowExtraDecode: 1,
   categories: [], // to be filled in
 };
 
@@ -88,40 +88,48 @@ export type GameID = ID;
 export type Game = {
   id: GameID;
   config: GameConfig;
-  state: GameState;
+  encodingTeamColor: TeamColor;
   secrets: Array<Secret>;
+  signal?: Maybe<string>;
+  secretCount?: Maybe<number>;
 };
 
-export type GameState =
-  | {
-      state: 'ENCODING';
-      teamColor: TeamColor;
-    }
-  | {
-      state: 'DECODING';
-      teamColor: TeamColor;
-      signal: string;
-      secretCount: number;
-    };
+export const SecretType = {
+  Secret: 0,
+  Virus: 1,
+  Null: 2,
+} as const;
+
+export type SecretType = typeof SecretType[keyof typeof SecretType];
+
+export interface DecodeAttempt {
+  teamColor: TeamColor;
+  players: Array<string>;
+}
 
 export type Secret = {
-  secret: string;
-  decodeAttempt?: Maybe<{
-    teamColor: TeamColor;
-    key: string;
-  }>;
+  value: string;
 } & (
-  | // team secret
-  {
-      teamColor: TeamColor;
-    }
-  // neutral secret
-  | {}
-  // virus
   | {
-      isVirus: true;
+      isDecoded: 1;
+      decodeAttempt: DecodeAttempt;
     }
-);
+  | {
+      isDecoded?: 0;
+      decodeAttempt?: Maybe<DecodeAttempt>;
+    }
+) &
+  (
+    | // team secret
+    {
+        type: typeof SecretType.Secret;
+        teamColor: TeamColor;
+      }
+    // null or virus
+    | {
+        type: typeof SecretType.Null | typeof SecretType.Virus;
+      }
+  );
 
 export const UIRoute = {
   JoinCreateLobby: '/',
@@ -149,23 +157,31 @@ export interface LobbyPostResponse {
   lobbyCode: LobbyCode;
 }
 
+export const LobbyPutOp = {
+  Join: 0,
+  PromoteDecoder: 1,
+  DemoteEncoder: 2,
+  Leave: 3,
+} as const;
+
+export type LobbyPutOp = typeof LobbyPutOp[keyof typeof LobbyPutOp];
+
 export type LobbyPutRequest =
   | {
-      op: 'JOIN';
+      op: typeof LobbyPutOp.Join;
       playerName: string;
       teamColor?: TeamColor;
     }
   | {
-      op: 'PROMOTE_DECODER';
+      op: typeof LobbyPutOp.PromoteDecoder;
       playerName: string;
-      teamColor: TeamColor;
     }
   | {
-      op: 'DEMOTE_DECODER';
-      teamColor: TeamColor;
+      op: typeof LobbyPutOp.DemoteEncoder;
+      playerName: string;
     }
   | {
-      op: 'LEAVE';
+      op: typeof LobbyPutOp.Leave;
       playerName: string;
     };
 
@@ -185,28 +201,38 @@ export interface GamePostRequest {
 
 export interface GamePostResponse {}
 
+export const GamePutOp = {
+  Encode: 0,
+  Decode: 1,
+  CancelDecode: 2,
+  SkipDecode: 3,
+  CancelSkipDecode: 4,
+} as const;
+
+export type GamePutOp = typeof GamePutOp[keyof typeof GamePutOp];
+
 export type GamePutRequest = {
   lobbyCode: LobbyCode;
   playerName: string;
 } & (
   | {
-      op: 'ENCODE';
+      op: typeof GamePutOp.Encode;
       signal: string;
       secretCount: number;
     }
   | {
-      op: 'DECODE';
-      signal: string;
+      op: typeof GamePutOp.Decode;
+      secret: string;
     }
   | {
-      op: 'CANCEL_DECODE';
-      signal: string;
+      op: typeof GamePutOp.CancelDecode;
+      secret: string;
     }
   | {
-      op: 'SKIP_DECODE';
+      op: typeof GamePutOp.SkipDecode;
     }
   | {
-      op: 'CANCEL_SKIP_DECODE';
+      op: typeof GamePutOp.CancelSkipDecode;
     }
 );
 
@@ -217,3 +243,5 @@ export function objectKeys<TObject extends object>(
 ): Array<keyof TObject> {
   return Object.keys(object) as Array<keyof TObject>;
 }
+
+export const API_PORT = process.env['PORT'] as string;

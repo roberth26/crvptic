@@ -9,16 +9,21 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import invariant from 'ts-invariant';
 import {
-  APIRoute,
   type DecodeMethod,
   type GamePostRequest,
   type GamePostResponse,
   type LobbyCode,
-  type LobbyPostRequest,
   type LobbyPostResponse,
-  type LobbyPutRequest,
   type LobbyPutResponse,
+  type GamePutResponse,
+  APIRoute,
   UIRoute,
+  API_PORT,
+  type Maybe,
+  LobbyPutOp,
+  GamePutRequest,
+  LobbyPostRequest,
+  LobbyPutRequest,
 } from '../common';
 import { ConfigureGame } from './screens/ConfigureGame';
 import { JoinCreateLobby } from './screens/JoinCreateLobby';
@@ -41,25 +46,27 @@ const router = createBrowserRouter([
         element: <JoinCreateLobby />,
         index: true,
         action: async ({ request }) => {
-          const formData: { playerName: string } & (
-            | { op: 'JOIN'; lobbyCode: LobbyCode }
-            | { op: 'CREATE' }
-          ) = Object.fromEntries(await request.formData());
+          const formData = await request.formData();
+          const playerName = formData.get('playerName');
+          invariant(playerName, 'TODO: explode');
+          const op = formData.get('op');
           try {
-            const response =
-              formData.op === 'JOIN'
-                ? putLobby(formData.lobbyCode, {
-                    request: { op: 'JOIN', playerName: formData.playerName },
+            const { lobbyCode } = await (op === String(LobbyPutOp.Join)
+              ? putLobby(
+                  formData.get('lobbyCode') &&
+                    String(formData.get('lobbyCode')),
+                  {
+                    body: formData,
                     signal: request.signal,
-                  })
-                : postLobby({
-                    request: { playerName: formData.playerName },
-                    signal: request.signal,
-                  });
-            const { lobbyCode } = await response;
+                  },
+                )
+              : postLobby({
+                  body: formData,
+                  signal: request.signal,
+                }));
             writeStateToLocalStorage({
               lobbyCode,
-              playerName: formData.playerName,
+              playerName: String(playerName),
             });
             return redirect(generatePath(UIRoute.Lobby, { lobbyCode }));
           } catch (error) {
@@ -78,6 +85,13 @@ const router = createBrowserRouter([
             return redirect(UIRoute.JoinCreateLobby);
           }
           return connectLobby(lobbyCode, playerName, { signal });
+        },
+        action: async ({ request }) => {
+          const formData = await request.formData();
+          return putGame({
+            request: {},
+            signal: request.signal,
+          });
         },
         children: [
           {
@@ -99,8 +113,8 @@ const router = createBrowserRouter([
           {
             path: UIRoute.ConfigureGame,
             element: <ConfigureGame />,
-            loader: () => {
-              return fetch(APIRoute.Category);
+            loader: ({ request }) => {
+              return getCategories({ signal: request.signal });
             },
             action: async ({ request }) => {
               const formData = await request.formData();
@@ -114,10 +128,11 @@ const router = createBrowserRouter([
                     decodeTimeLimit: Number(formData.get('decodeTimeLimit')),
                     secretCount: Number(formData.get('secretCount')),
                     virusCount: Number(formData.get('virusCount')),
-                    decodeMethod: String(
+                    decodeMethod: Number(
                       formData.get('decodeMethod'),
                     ) as DecodeMethod,
-                    allowExtraDecode: formData.get('allowExtraDecode') === 'on',
+                    allowExtraDecode:
+                      formData.get('allowExtraDecode') === 'on' ? 1 : 0,
                     categories: formData.getAll('categories') as Array<string>,
                   },
                 },
@@ -146,8 +161,16 @@ const rootElement = document.getElementById('root');
 invariant(rootElement != null, 'rootElement nullish');
 createRoot(rootElement).render(<Root />);
 
+async function getCategories({ signal }: { signal?: AbortSignal }) {
+  const url = new URL(APIRoute.Category, location.href);
+  url.port = API_PORT;
+  return fetch(url, {
+    signal,
+  });
+}
+
 async function putLobby(
-  lobbyCode: LobbyCode,
+  lobbyCode: Maybe<LobbyCode>,
   {
     request,
     signal,
@@ -156,7 +179,13 @@ async function putLobby(
     signal?: AbortSignal;
   },
 ): Promise<LobbyPutResponse> {
-  return fetch(generatePath(APIRoute.Lobby, { lobbyCode }), {
+  invariant(lobbyCode, 'TODO: explode here');
+  const url = new URL(
+    generatePath(APIRoute.Lobby, { lobbyCode }),
+    location.href,
+  );
+  url.port = API_PORT;
+  return fetch(url, {
     method: 'PUT',
     body: JSON.stringify(request),
     headers: {
@@ -173,7 +202,9 @@ async function postLobby({
   request: LobbyPostRequest;
   signal?: AbortSignal;
 }): Promise<LobbyPostResponse> {
-  return fetch(generatePath(APIRoute.Lobby, { lobbyCode: null }), {
+  const url = new URL(generatePath(APIRoute.Lobby), location.href);
+  url.port = API_PORT;
+  return fetch(url, {
     method: 'POST',
     body: JSON.stringify(request),
     headers: {
@@ -189,11 +220,10 @@ async function connectLobby(
   { signal }: { signal?: AbortSignal },
 ): Promise<EventSource> {
   const url = new URL(
-    // TODO: wtf
     generatePath(APIRoute.Lobby, { lobbyCode }),
     location.href,
   );
-  url.port = '3000'; // TODO: env var?
+  url.port = API_PORT;
   url.search = String(new URLSearchParams({ playerName }));
   const eventSource = new EventSource(url);
   signal?.addEventListener('abort', () => eventSource.close(), {
@@ -214,8 +244,29 @@ async function postGame({
   request: GamePostRequest;
   signal?: AbortSignal;
 }): Promise<GamePostResponse> {
-  return fetch(APIRoute.Game, {
+  const url = new URL(APIRoute.Game, location.href);
+  url.port = API_PORT;
+  return fetch(url, {
     method: 'POST',
+    body: JSON.stringify(request),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    signal,
+  }).then<GamePostResponse>(res => res.json());
+}
+
+async function putGame({
+  request,
+  signal,
+}: {
+  request: GamePutRequest;
+  signal?: AbortSignal;
+}): Promise<GamePutResponse> {
+  const url = new URL(APIRoute.Game, location.href);
+  url.port = API_PORT;
+  return fetch(url, {
+    method: 'PUT',
     body: JSON.stringify(request),
     headers: {
       'Content-Type': 'application/json',

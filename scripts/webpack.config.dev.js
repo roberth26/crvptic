@@ -1,5 +1,6 @@
 const path = require('path');
 const { fileURLToPath } = require('url');
+const { DefinePlugin } = require('webpack');
 const nodeExternals = require('webpack-node-externals');
 const CopyPlugin = require('copy-webpack-plugin');
 
@@ -34,8 +35,15 @@ const clientConfig = {
     ],
   },
   plugins: [
+    new DefinePlugin({
+      'process.env.PORT': JSON.stringify(process.env['PORT']),
+    }),
     new CopyPlugin({
-      patterns: [{ from: 'src/client/static' }],
+      patterns: [
+        {
+          from: './src/static',
+        },
+      ],
     }),
   ],
   resolve: {
@@ -50,7 +58,7 @@ const apiConfig = {
   },
   output: {
     filename: '[name].js',
-    path: path.resolve(__dirname, '../build'),
+    path: path.resolve(__dirname, '../build/api'),
   },
   module: {
     rules: [

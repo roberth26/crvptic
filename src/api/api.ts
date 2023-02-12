@@ -1,8 +1,7 @@
-import path from 'path';
 import Express from 'express';
+import cors from 'cors';
 import {
   type CategoryGetResponse,
-  APIRoute,
   type LobbyPostRequest,
   type LobbyPostResponse,
   type LobbyPutRequest,
@@ -10,18 +9,19 @@ import {
   type GamePostRequest,
   type GamePostResponse,
   type GamePutRequest,
+  type GamePutResponse,
+  API_PORT,
+  APIRoute,
+  LobbyPutOp,
 } from '../common';
 import { createStore } from './store';
 import invariant from 'ts-invariant';
-
-const SERVER_PORT = 3000;
-// const STATIC_PATH = '/static';
 
 const store = createStore();
 const app = Express();
 
 app.use(Express.json());
-// app.use(STATIC_PATH, Express.static(path.join(__dirname, 'static')));
+app.use(cors({ origin: true }));
 
 app.get(APIRoute.Category, (_req, res) => {
   const defaultCategories = new Set(store.getDefaultSecretCategories());
@@ -51,7 +51,7 @@ app.put(APIRoute.Lobby, (req, res) => {
   invariant(typeof lobbyCode === 'string', 'lobbyCode not string');
   const request = req.body as LobbyPutRequest;
   switch (request.op) {
-    case 'JOIN': {
+    case LobbyPutOp.Join: {
       const { playerName, teamColor } = request;
       const lobby = store.joinTeam({
         lobbyCode,
@@ -66,9 +66,9 @@ app.put(APIRoute.Lobby, (req, res) => {
       return;
     }
 
-    case 'DEMOTE_DECODER': {
-      const { teamColor } = request;
-      store.demoteEncoder(lobbyCode, teamColor);
+    case LobbyPutOp.DemoteEncoder: {
+      const { playerName } = request;
+      store.demoteEncoder(lobbyCode, playerName);
       const response: LobbyPutResponse = {
         lobbyCode,
       };
@@ -76,9 +76,9 @@ app.put(APIRoute.Lobby, (req, res) => {
       return;
     }
 
-    case 'PROMOTE_DECODER': {
-      const { teamColor, playerName } = request;
-      store.promoteEncoder({ lobbyCode, teamColor, playerName });
+    case LobbyPutOp.PromoteDecoder: {
+      const { playerName } = request;
+      store.promoteEncoder(lobbyCode, playerName);
       const response: LobbyPutResponse = {
         lobbyCode,
       };
@@ -86,7 +86,7 @@ app.put(APIRoute.Lobby, (req, res) => {
       return;
     }
 
-    case 'LEAVE': {
+    case LobbyPutOp.Leave: {
       throw new Error('LEAVE not implemented!');
     }
 
@@ -131,22 +131,19 @@ app.get(APIRoute.Lobby, (req, res) => {
 
 app.post(APIRoute.Game, (req, res) => {
   const { lobbyCode, gameConfig } = req.body as GamePostRequest;
-  store.createGame(lobbyCode, gameConfig);
+  store.startGame(lobbyCode, gameConfig);
   const response: GamePostResponse = {};
   res.json(response);
 });
 
-app.put(APIRoute.Game, (req, _res) => {
-  const { op } = req.body as GamePutRequest;
-  switch (op) {
-  }
+app.put(APIRoute.Game, (req, res) => {
+  const request = req.body as GamePutRequest;
+  store.sendGameEvent(request.lobbyCode, request);
+  const response: GamePutResponse = {};
+  res.json(response);
 });
 
-app.get('/*', (_req, res) => {
-  res.sendFile(path.join(__dirname, '/page.html'));
-});
-
-const server = app.listen(SERVER_PORT);
+const server = app.listen(API_PORT);
 
 process.on('SIGTERM', () => {
   store.dispose();

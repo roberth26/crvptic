@@ -7,14 +7,17 @@ import {
   type GameConfig,
   type Secret,
   type TeamColor,
+  type GamePutRequest,
   defaultGameConfigWithoutCategories,
   objectKeys,
+  SecretType,
 } from '../common';
 import Adult from '../../data/adult.json';
 import Misc from '../../data/misc.json';
 import Sports from '../../data/sports.json';
 import Animals from '../../data/animals.json';
 import Entertainment from '../../data/entertainment.json';
+import { game } from './game';
 
 const SECRET_BANK = {
   Animals,
@@ -41,6 +44,7 @@ type LobbySubscriber = (Lobby: Lobby) => void;
 
 interface State {
   lobbiesByCode: Record<LobbyCode, Lobby>;
+  gamesByLobbyCode: Record<LobbyCode, ReturnType<typeof game>>;
   LobbySubscribersByLobbyCode: Record<LobbyCode, Set<LobbySubscriber>>;
   tickersByLobbyCode: Record<LobbyCode, NodeJS.Timer>;
   disposeSubscribers: Set<GenericSubscriber>;
@@ -49,6 +53,7 @@ interface State {
 export function createStore() {
   const state: State = {
     lobbiesByCode: {},
+    gamesByLobbyCode: {},
     LobbySubscribersByLobbyCode: {},
     tickersByLobbyCode: {},
     disposeSubscribers: new Set(),
@@ -152,7 +157,7 @@ export function createStore() {
     return lobby;
   };
 
-  const createGame = (
+  const startGame = (
     lobbyCode: LobbyCode,
     gameConfig: GameConfig = DEFAULT_GAME_CONFIG,
   ) => {
@@ -168,9 +173,9 @@ export function createStore() {
     const partialTeams = teams.filter(team => team.players.length < 2);
     // invariant(partialTeams.length === 0, 'partial teams detected');
     const totalTeamSecrets = gameConfig.secretCount * teams.length;
-    const totalNeutralSecrets = gameConfig.secretCount;
+    const totalNulls = gameConfig.secretCount;
     const totalViruses = gameConfig.virusCount;
-    const totalSecrets = totalTeamSecrets + totalNeutralSecrets + totalViruses;
+    const totalSecrets = totalTeamSecrets + totalNulls + totalViruses;
     const secretBank = shuffleArray(
       Object.entries(SECRET_BANK)
         .filter(([category]) => gameConfig.categories.includes(category))
@@ -183,17 +188,19 @@ export function createStore() {
       secrets.push(
         ...secretBank.splice(0, gameConfig.secretCount).map(
           (secret): Secret => ({
-            secret,
+            type: SecretType.Secret,
+            value: secret,
             teamColor: team.color,
           }),
         ),
       );
     });
-    // neutral secrets
+    // nulls
     secrets.push(
-      ...secretBank.splice(0, totalNeutralSecrets).map(
+      ...secretBank.splice(0, totalNulls).map(
         (secret): Secret => ({
-          secret,
+          type: SecretType.Null,
+          value: secret,
         }),
       ),
     );
@@ -201,8 +208,8 @@ export function createStore() {
     secrets.push(
       ...secretBank.splice(0, totalViruses).map(
         (secret): Secret => ({
-          secret,
-          isVirus: true,
+          type: SecretType.Virus,
+          value: secret,
         }),
       ),
     );
@@ -211,12 +218,15 @@ export function createStore() {
     lobby.activeGame = {
       id: shortid.generate(),
       config: gameConfig,
-      state: {
-        state: 'ENCODING',
-        teamColor: teams[0]!.color,
-      },
+      encodingTeamColor: teams[0]!.color,
       secrets,
     };
+    const itr = game(mutator => {
+      mutator(lobby);
+      // restartTicking(lobbyCode);
+    });
+    state.gamesByLobbyCode[lobbyCode] = itr;
+    itr.next(); // kick it off
     restartTicking(lobbyCode);
   };
 
@@ -281,11 +291,11 @@ export function createStore() {
     };
   };
 
-  const demoteEncoder = (lobbyCode: LobbyCode, teamColor: TeamColor) => {
+  const demoteEncoder = (lobbyCode: LobbyCode, playerName: string) => {
     const lobby = state.lobbiesByCode[lobbyCode];
     invariant(lobby, `lobby lobbyCode=${lobbyCode} not found`);
-    const team = lobby.teams.find(team => team.color === teamColor);
-    invariant(team, `team color=${teamColor} not found`);
+    const team = lobby.teams.find(team => team.players.includes(playerName));
+    invariant(team, `team playerName=${playerName} not found`);
     invariant(team.players.length > 1, 'no other players to promote');
     const encoder = team.encoder;
     invariant(encoder, 'no encoder to demote');
@@ -296,31 +306,24 @@ export function createStore() {
     restartTicking(lobbyCode);
   };
 
-  const promoteEncoder = ({
-    lobbyCode,
-    teamColor,
-    playerName,
-  }: {
-    lobbyCode: LobbyCode;
-    teamColor: TeamColor;
-    playerName: string;
-  }) => {
+  const promoteEncoder = (lobbyCode: LobbyCode, playerName: string) => {
     const lobby = state.lobbiesByCode[lobbyCode];
-    if (lobby == null) {
-      return;
-    }
-    const team = lobby.teams.find(team => team.color === teamColor);
-    invariant(team, `team color=${teamColor} not found`);
+    invariant(lobby, `lobby lobbyCode=${lobbyCode} not found`);
+    const team = lobby.teams.find(team => team.players.includes(playerName));
+    invariant(team, `team playerName=${playerName} not found`);
     invariant(team.players.length > 1, 'no other players');
-    const isMember = team.players.includes(playerName);
-    invariant(
-      isMember,
-      `player name=${playerName} not member of team color=${teamColor}`,
-    );
     team.players = team.players.filter(player => player !== playerName);
     team.players.unshift(playerName);
     team.encoder = team.players[0];
     restartTicking(lobbyCode);
+  };
+
+  const sendGameEvent = (lobbyCode: LobbyCode, request: GamePutRequest) => {
+    const lobby = state.lobbiesByCode[lobbyCode];
+    invariant(lobby, `lobby lobbyCode=${lobbyCode} not found`);
+    const game = state.gamesByLobbyCode[lobbyCode];
+    invariant(game, 'no game running in lobby lobbyCode=${lobbyCode}');
+    game.next(request);
   };
 
   return {
@@ -330,12 +333,13 @@ export function createStore() {
     onDispose,
     onLobby,
     createLobby,
-    createGame,
+    startGame,
     joinTeam,
     dispose,
     subscribePlayer,
     demoteEncoder,
     promoteEncoder,
+    sendGameEvent,
   };
 }
 

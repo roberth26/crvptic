@@ -11,6 +11,7 @@ import {
   type Maybe,
   type LobbyPutRequest,
   APIRoute,
+  API_PORT,
 } from '../../common';
 import { useLobby } from './Lobby';
 
@@ -22,7 +23,12 @@ export function LobbyMenu() {
 
   const { mutate: putLobby } = useMutation({
     mutationFn: (request: LobbyPutRequest) => {
-      return fetch(generatePath(APIRoute.Lobby, { lobbyCode }), {
+      const url = new URL(
+        generatePath(APIRoute.Lobby, { lobbyCode }),
+        location.href,
+      );
+      url.port = API_PORT;
+      return fetch(url, {
         method: 'PUT',
         body: JSON.stringify(request),
         headers: {

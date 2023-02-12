@@ -35,8 +35,14 @@ export function Lobby() {
   });
 
   useEffect(() => {
-    const handleMessage = (messageEvent: MessageEvent) => {
-      setLobby(JSON.parse(messageEvent.data));
+    const handleMessage = ({ data: newLobbyStr }: MessageEvent) => {
+      setLobby(prevLobby => {
+        const prevLobbyStr = JSON.stringify(prevLobby);
+        if (prevLobbyStr === newLobbyStr) {
+          return prevLobby;
+        }
+        return JSON.parse(newLobbyStr);
+      });
     };
     eventSource.addEventListener('message', handleMessage);
     return () => eventSource.removeEventListener('message', handleMessage);

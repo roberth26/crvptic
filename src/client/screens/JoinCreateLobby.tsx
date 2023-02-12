@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Form } from 'react-router-dom';
+import { LobbyPutOp } from '../../common';
 import { readStateFromLocalStorage } from '../localStorage';
 
 export function JoinCreateLobby() {
@@ -33,11 +34,11 @@ export function JoinCreateLobby() {
           pattern="[A-Za-z]{4}"
         />
       </label>
-      <button name="op" value="JOIN">
+      <button name="op" value={LobbyPutOp.Join}>
         Join lobby
       </button>
       <hr />
-      <button name="op" value="CREATE">
+      <button name="op" value={-1}>
         Create lobby
       </button>
     </Form>
