@@ -8,28 +8,31 @@ import {
 } from 'react-router-dom';
 import invariant from 'ts-invariant';
 import {
-  type CategoryGetResponse,
   DecodeMethod,
   defaultGameConfigWithoutCategories,
+  Route,
   TimeLimit,
-  UIRoute,
+  type CategoriesResponse,
 } from '../../common';
 import { useLobby } from './Lobby';
 
-export function ConfigureGame() {
+export function GameConfigure() {
   const { lobbyCode } = useParams();
-  invariant(lobbyCode, 'lobbyCode nullish');
+  invariant(lobbyCode, 'lobbyCode missing');
   const { playerName } = useLobby();
   invariant(playerName, 'playerName missing');
-  const { categories: categoriesRaw } = useLoaderData() as CategoryGetResponse;
+  const { categories: categoriesRaw } = useLoaderData() as CategoriesResponse;
   const categories = categoriesRaw.map(({ category }) => category);
   const defaultCategories = categoriesRaw.flatMap(({ category, isDefault }) =>
     isDefault ? [category] : [],
   );
 
   return (
-    <Form className="ConfigureGame" method="post">
-      <input hidden={true} name="lobbyCode" value={lobbyCode} readOnly={true} />
+    <Form
+      className="ConfigureGame"
+      method="post"
+      action={generatePath(Route.GameStart, { lobbyCode })}
+    >
       <input
         hidden={true}
         name="playerName"
@@ -115,10 +118,10 @@ export function ConfigureGame() {
           ))}
         </div>
       </div>
-      <Link role="button" to={generatePath(UIRoute.Lobby, { lobbyCode })}>
+      <Link role="button" className="bordered" to=".." replace={true}>
         Cancel
       </Link>
-      <button>Start game</button>
+      <button className="bordered">Start game</button>
     </Form>
   );
 }

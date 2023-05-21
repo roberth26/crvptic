@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "PORT=3001 webpack --config ./scripts/webpack.config.dev.js -w & PORT=3001 nodemon ./build/api/api.js & serve ./build/static -p 3000 -s",
+    "start": "PORT=3001 webpack --config ./scripts/webpack.config.dev.js -w & PORT=3001 nodemon ./build/server/api.js & serve ./build/static -p 3000 -s",
     "clean": "rm -rf ./build",
     "build": "npm run clean && PORT=3001 webpack --config ./scripts/webpack.config.prod.js"
   },
@@ -18,6 +18,7 @@
     "@babel/preset-typescript": "^7.18.6",
     "@types/cors": "^2.8.13",
     "@types/express": "^4.17.15",
+    "@types/multer": "^1.4.7",
     "@types/node": "^18.11.18",
     "@types/react": "^18.0.26",
     "@types/react-dom": "^18.0.10",
@@ -36,13 +37,15 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.20.7",
-    "@tanstack/react-query": "^4.22.0",
     "cors": "^2.8.5",
+    "eventemitter3": "^5.0.1",
     "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
     "nodemon": "^2.0.20",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.6.2",
+    "redux-saga": "^1.2.3",
     "shortid": "^2.2.16",
     "shuffle-array": "^1.0.1",
     "ts-invariant": "^0.10.3"

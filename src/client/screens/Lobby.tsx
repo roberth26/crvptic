@@ -45,8 +45,10 @@ export function Lobby() {
       });
     };
     eventSource.addEventListener('message', handleMessage);
-    return () => eventSource.removeEventListener('message', handleMessage);
-  }, [eventSource]);
+    return () => {
+      eventSource.removeEventListener('message', handleMessage);
+    };
+  }, [eventSource, lobbyCode, playerName]);
 
   const context = useMemo<LobbyContext>(
     () => ({
@@ -58,7 +60,22 @@ export function Lobby() {
 
   return (
     <LobbyContext.Provider value={context}>
-      {lobby == null ? 'Loading...' : lobby.activeGame ? <Game /> : <Outlet />}
+      {lobby == null ? (
+        <div
+          style={{
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          Loading...
+        </div>
+      ) : lobby.activeGame ? (
+        <Game />
+      ) : (
+        <Outlet />
+      )}
     </LobbyContext.Provider>
   );
 }

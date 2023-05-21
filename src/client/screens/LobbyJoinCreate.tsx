@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Form } from 'react-router-dom';
-import { LobbyPutOp } from '../../common';
+import { LobbyCode, Route } from '../../common';
 import { readStateFromLocalStorage } from '../localStorage';
 
-export function JoinCreateLobby() {
+export function LobbyJoinCreate() {
   const [{ defaultLobbyCode, defaultPlayerName }] = useState(() => {
     const state = readStateFromLocalStorage();
     return {
@@ -11,9 +11,12 @@ export function JoinCreateLobby() {
       defaultPlayerName: state?.playerName,
     };
   });
+  const [isLobbyCodeValid, setIsLobbyCodeValid] = useState(
+    Boolean(LobbyCode(defaultLobbyCode)),
+  );
 
   return (
-    <Form className="JoinCreateLobby" method="post">
+    <Form method="post" className="JoinCreateLobby">
       <label className="form-group">
         Your name:
         <input
@@ -31,14 +34,20 @@ export function JoinCreateLobby() {
           type="text"
           placeholder="ex: ASDF"
           defaultValue={defaultLobbyCode}
-          pattern="[A-Za-z]{4}"
+          onChange={({ currentTarget: { value: lobbyCode } }) => {
+            setIsLobbyCodeValid(Boolean(LobbyCode(lobbyCode)));
+          }}
         />
       </label>
-      <button name="op" value={LobbyPutOp.Join} className="bordered">
+      <button
+        formAction={Route.Lobby}
+        disabled={!isLobbyCodeValid}
+        className="bordered"
+      >
         Join lobby
       </button>
       <hr />
-      <button name="op" value={-1} className="bordered">
+      <button formAction={Route.LobbyCreate} className="bordered">
         Create lobby
       </button>
     </Form>

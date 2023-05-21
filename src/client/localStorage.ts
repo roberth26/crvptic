@@ -15,6 +15,9 @@ export function readStateFromLocalStorage(): Maybe<State> {
   return JSON.parse(state);
 }
 
-export function writeStateToLocalStorage(state: State) {
-  localStorage.setItem(KEY, JSON.stringify(state));
+export function writeStateToLocalStorage(state: Partial<State>) {
+  localStorage.setItem(
+    KEY,
+    JSON.stringify({ ...readStateFromLocalStorage(), ...state }),
+  );
 }

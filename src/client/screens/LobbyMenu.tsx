@@ -1,19 +1,13 @@
-import { useMutation } from '@tanstack/react-query';
-import React, { useMemo } from 'react';
-import { Form, generatePath, Link, useParams } from 'react-router-dom';
-import invariant from 'ts-invariant';
+import React, { memo, useMemo } from 'react';
 import {
-  type Team,
-  UIRoute,
-  Color,
-  objectKeys,
-  type Lobby,
-  type Maybe,
-  type LobbyPutRequest,
-  APIRoute,
-  API_PORT,
-  LobbyPutOp,
-} from '../../common';
+  Form,
+  generatePath,
+  Link,
+  useFetcher,
+  useParams,
+} from 'react-router-dom';
+import invariant from 'ts-invariant';
+import { type Team, Color, objectKeys, Route } from '../../common';
 import { useLobby } from './Lobby';
 
 export function LobbyMenu() {
@@ -21,24 +15,6 @@ export function LobbyMenu() {
   invariant(playerName, 'playerName missing');
   const { lobbyCode } = useParams();
   invariant(lobbyCode, 'lobbyCode missing');
-
-  const { mutate: putLobby } = useMutation({
-    mutationFn: (request: LobbyPutRequest) => {
-      const url = new URL(
-        generatePath(APIRoute.Lobby, { lobbyCode }),
-        location.href,
-      );
-      url.port = API_PORT;
-      return fetch(url, {
-        method: 'PUT',
-        body: JSON.stringify(request),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    },
-  });
-
   const isLeader = lobby?.leader === playerName;
 
   const teams = useMemo(() => {
@@ -47,7 +23,6 @@ export function LobbyMenu() {
         lobby?.teams.find(team => team.color === color) ?? {
           color,
           players: [],
-          encoder: null,
         },
     );
   }, [lobby]);
@@ -55,13 +30,11 @@ export function LobbyMenu() {
   return (
     <div className="LobbyMenu">
       {isLeader && (
-        <Form className="LobbyMenu_controls" method="post">
-          <input
-            hidden={true}
-            name="lobbyCode"
-            value={lobbyCode}
-            readOnly={true}
-          />
+        <Form
+          className="LobbyMenu_controls"
+          method="post"
+          action={generatePath(Route.GameStart, { lobbyCode })}
+        >
           <input
             hidden={true}
             name="playerName"
@@ -72,7 +45,7 @@ export function LobbyMenu() {
           <hr />
           <Link
             role="button"
-            to={generatePath(UIRoute.ConfigureGame, { lobbyCode })}
+            to={generatePath(Route.GameConfigure, { lobbyCode })}
             className="bordered"
           >
             Configure custom game
@@ -81,95 +54,66 @@ export function LobbyMenu() {
       )}
       <div className="LobbyMenu_teams">
         {teams.map(team => (
-          <Team
-            key={team.color}
-            team={team}
-            lobby={lobby}
-            playerName={playerName}
-            onJoin={() => {
-              putLobby({
-                op: LobbyPutOp.Join,
-                playerName,
-                teamColor: team.color,
-              });
-            }}
-            onEncoderPromote={() => {
-              putLobby({
-                op: LobbyPutOp.PromoteDecoder,
-                playerName,
-              });
-            }}
-            onEncoderDemote={() => {
-              putLobby({
-                op: LobbyPutOp.DemoteEncoder,
-                playerName,
-              });
-            }}
-          />
+          <Team key={team.color} team={team} />
         ))}
       </div>
     </div>
   );
 }
 
-function Team({
-  team,
-  lobby,
-  onJoin,
-  onEncoderPromote,
-  onEncoderDemote,
-  playerName,
-}: {
-  team: Team;
-  lobby: Maybe<Lobby>;
-  onJoin: () => void;
-  onEncoderPromote: () => void;
-  onEncoderDemote: () => void;
-  playerName: string;
-}) {
+const Team = memo(({ team }: { team: Team }) => {
+  const fetcher = useFetcher();
+  const { lobby, playerName } = useLobby();
+  invariant(lobby, 'TODO: blow up');
+  invariant(playerName, 'TODO: also blow up');
+  const lobbyCode = lobby.code;
+  const teamColor = team.color;
   const isMember = team.players.includes(playerName);
-  const isEncoder = team.encoder === playerName;
+  const isEncoder = team.players[0] === playerName;
   const canJoin = !isMember;
   const canPromote = isMember && !isEncoder;
   const canDemote = isMember && isEncoder && team.players.length > 1;
+  const formAction = canDemote
+    ? generatePath(Route.TeamEncoderDemote, { lobbyCode, teamColor })
+    : canPromote
+    ? generatePath(Route.TeamEncoderPromote, { lobbyCode, teamColor })
+    : canJoin
+    ? generatePath(Route.TeamJoin, { lobbyCode, teamColor })
+    : undefined;
 
   return (
     <article className="Team">
-      <button
-        className="Team_header"
-        onClick={
-          canDemote
-            ? onEncoderDemote
-            : canPromote
-            ? onEncoderPromote
-            : canJoin
-            ? onJoin
-            : () => invariant(false, 'unhandled!')
-        }
-        disabled={!canDemote && !canPromote && !canJoin}
-        style={{
-          // @ts-ignore
-          '--teamColor': Color[team.color],
-        }}
-      >
-        <span>{team.color} team</span>
-        {canDemote && <span>Demote</span>}
-        {canPromote && <span>Promote</span>}
-        {canJoin && <span>Join</span>}
-      </button>
+      <fetcher.Form method="put">
+        <button
+          className="Team_header"
+          formAction={formAction}
+          name="playerName"
+          value={playerName}
+          disabled={!canDemote && !canPromote && !canJoin}
+          style={{
+            // @ts-ignore
+            '--teamColor': Color[team.color],
+          }}
+        >
+          <span>{team.color} team</span>
+          {canDemote && <span>Demote</span>}
+          {canPromote && <span>Promote</span>}
+          {canJoin && <span>Join</span>}
+        </button>
+      </fetcher.Form>
       {team.players.map(player => {
         const isLeader = player === lobby?.leader;
-        const isEncoder = player === team.encoder;
+        const isEncoder = player === team.players[0];
         return (
           <div
             key={player}
             className={`Team_member ${isLeader ? 'leader' : ''}`}
           >
             <span>{player}</span>
-            {isEncoder && <span className="encoder">🔮</span>}
+            {isEncoder && <span className="encoder">📟</span>}
           </div>
         );
       })}
     </article>
   );
-}
+});

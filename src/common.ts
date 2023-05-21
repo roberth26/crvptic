@@ -1,3 +1,9 @@
+import Adult from '../data/adult.json';
+import Misc from '../data/misc.json';
+import Sports from '../data/sports.json';
+import Animals from '../data/animals.json';
+import Entertainment from '../data/entertainment.json';
+
 export type Maybe<T> = T | undefined | null;
 
 export const TimeLimit = {
@@ -9,7 +15,7 @@ export const TimeLimit = {
   '10m': 600,
 } as const;
 
-export type TimeLimit = typeof TimeLimit[keyof typeof TimeLimit];
+export type TimeLimit = (typeof TimeLimit)[keyof typeof TimeLimit];
 
 export const Color = {
   Blue: 'hsl(228, 79%, 69%)',
@@ -22,7 +28,7 @@ export const Color = {
 
 export type TeamColor = keyof typeof Color;
 
-export type Color = typeof Color[TeamColor];
+export type Color = (typeof Color)[TeamColor];
 
 export const DecodeMethod = {
   First: 0,
@@ -30,7 +36,7 @@ export const DecodeMethod = {
   Majority: 2,
 } as const;
 
-export type DecodeMethod = typeof DecodeMethod[keyof typeof DecodeMethod];
+export type DecodeMethod = (typeof DecodeMethod)[keyof typeof DecodeMethod];
 
 export interface GameConfig {
   encodeTimeLimit: number;
@@ -38,28 +44,23 @@ export interface GameConfig {
   secretCount: number;
   virusCount: number;
   decodeMethod: DecodeMethod;
-  allowExtraDecode: 0 | 1;
+  allowExtraDecode: boolean;
   categories: Array<string>;
 }
 
-export const defaultGameConfigWithoutCategories: GameConfig = {
+export const defaultGameConfigWithoutCategories: Omit<
+  GameConfig,
+  'categories'
+> = {
   encodeTimeLimit: TimeLimit['5m'],
   decodeTimeLimit: TimeLimit['5m'],
   secretCount: 8,
   virusCount: 1,
   decodeMethod: DecodeMethod.Majority,
-  allowExtraDecode: 1,
-  categories: [], // to be filled in
+  allowExtraDecode: true,
 };
 
 export type ID = string;
-
-export type PlayerID = ID;
-
-export interface Player {
-  id: PlayerID;
-  name: string;
-}
 
 export interface PlayerStats {
   wins: number;
@@ -71,10 +72,16 @@ export interface PlayerStats {
 export interface Team {
   color: TeamColor;
   players: Array<string>;
-  encoder: Maybe<string>;
 }
 
 export type LobbyCode = string;
+
+export function LobbyCode(code: Maybe<string>) {
+  if (code == null || !/[A-Za-z]{4}/.test(code.trim())) {
+    return null;
+  }
+  return code.trim().toUpperCase() as LobbyCode;
+}
 
 export interface Lobby {
   code: LobbyCode;
@@ -100,7 +107,7 @@ export const SecretType = {
   Null: 2,
 } as const;
 
-export type SecretType = typeof SecretType[keyof typeof SecretType];
+export type SecretType = (typeof SecretType)[keyof typeof SecretType];
 
 export interface DecodeAttempt {
   teamColor: TeamColor;
@@ -131,112 +138,46 @@ export type Secret = {
       }
   );
 
-export const UIRoute = {
-  JoinCreateLobby: '/',
+export const Route = {
+  Categories: '/categories',
+  Index: '/',
+  LobbyCreate: '/lobby/create',
   Lobby: '/:lobbyCode',
-  ConfigureGame: '/:lobbyCode/config',
+  LobbyJoin: '/:lobbyCode/join',
+  LobbyLeave: '/:lobbyCode/leave',
+  TeamJoin: '/:lobbyCode/:teamColor/join',
+  TeamEncoderPromote: '/:lobbyCode/:teamColor/promote',
+  TeamEncoderDemote: '/:lobbyCode/:teamColor/demote',
+  GameConfigure: '/:lobbyCode/configure',
+  GameStart: '/:lobbyCode/start',
+  SecretEncode: '/:lobbyCode/encode',
+  SecretDecode: '/:lobbyCode/decode',
+  SecretDecodeCancel: '/:lobbyCode/decode-cancel',
 } as const;
 
-const API_ROUTE_BASE = '/api' as const;
-
-export const APIRoute = {
-  Category: `${API_ROUTE_BASE}/category`,
-  Lobby: `${API_ROUTE_BASE}/lobby/:lobbyCode?`,
-  Game: `${API_ROUTE_BASE}/game`,
-} as const;
-
-export interface CategoryGetResponse {
+export interface CategoriesResponse {
   categories: Array<{ category: string; isDefault?: 1 }>;
 }
 
-export type LobbyPostRequest = {
-  playerName: string;
-};
-
-export interface LobbyPostResponse {
+export interface LobbyCreateResponse {
   lobbyCode: LobbyCode;
 }
 
-export const LobbyPutOp = {
-  Join: 0,
-  PromoteDecoder: 1,
-  DemoteEncoder: 2,
-  Leave: 3,
-} as const;
+export interface LobbyLeaveResponse {}
 
-export type LobbyPutOp = typeof LobbyPutOp[keyof typeof LobbyPutOp];
+export interface TeamJoinResponse {}
 
-export type LobbyPutRequest =
-  | {
-      op: typeof LobbyPutOp.Join;
-      playerName: string;
-      teamColor?: TeamColor;
-    }
-  | {
-      op: typeof LobbyPutOp.PromoteDecoder;
-      playerName: string;
-    }
-  | {
-      op: typeof LobbyPutOp.DemoteEncoder;
-      playerName: string;
-    }
-  | {
-      op: typeof LobbyPutOp.Leave;
-      playerName: string;
-    };
+export interface TeamEncoderPromoteResponse {}
 
-export interface LobbyPutResponse {
-  lobbyCode: LobbyCode;
-}
+export interface TeamEncoderDemoteResponse {}
 
-export interface LobbyDeleteRequest {}
+export interface GameStartResponse {}
 
-export interface LobbyPutResponse {}
+export interface SecretEncodeResponse {}
 
-export interface GamePostRequest {
-  lobbyCode: LobbyCode;
-  playerName: string;
-  gameConfig?: Partial<GameConfig>;
-}
+export interface SecretDecodeResponse {}
 
-export interface GamePostResponse {}
-
-export const GamePutOp = {
-  Encode: 0,
-  Decode: 1,
-  CancelDecode: 2,
-  SkipDecode: 3,
-  CancelSkipDecode: 4,
-} as const;
-
-export type GamePutOp = typeof GamePutOp[keyof typeof GamePutOp];
-
-export type GamePutRequest = {
-  lobbyCode: LobbyCode;
-  playerName: string;
-} & (
-  | {
-      op: typeof GamePutOp.Encode;
-      signal: string;
-      secretCount: number;
-    }
-  | {
-      op: typeof GamePutOp.Decode;
-      secret: string;
-    }
-  | {
-      op: typeof GamePutOp.CancelDecode;
-      secret: string;
-    }
-  | {
-      op: typeof GamePutOp.SkipDecode;
-    }
-  | {
-      op: typeof GamePutOp.CancelSkipDecode;
-    }
-);
-
-export interface GamePutResponse {}
+export interface SecretDecodeCancelResponse {}
 
 export function objectKeys<TObject extends object>(
   object: TObject,
@@ -245,3 +186,38 @@ export function objectKeys<TObject extends object>(
 }
 
 export const API_PORT = process.env['PORT'] as string;
+
+const usedLobbyCodes = new Set<LobbyCode>();
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+export function createLobbyCode(): LobbyCode {
+  let code: LobbyCode;
+  do {
+    code = Array.from(
+      { length: 4 },
+      () => chars[Math.floor(Math.random() * chars.length)],
+    ).join('');
+  } while (usedLobbyCodes.has(code));
+  usedLobbyCodes.add(code);
+  return code;
+}
+
+export const SECRET_BANK = {
+  Animals,
+  Entertainment,
+  Misc,
+  Sports,
+  Adult,
+};
+
+export const DEFAULT_SECRET_CATEGORIES: Array<keyof typeof SECRET_BANK> = [
+  'Animals',
+  'Entertainment',
+  'Misc',
+  'Sports',
+];
+
+export const DEFAULT_GAME_CONFIG: GameConfig = {
+  ...defaultGameConfigWithoutCategories,
+  categories: DEFAULT_SECRET_CATEGORIES,
+};

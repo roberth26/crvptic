@@ -54,11 +54,11 @@ const clientConfig = {
 const apiConfig = {
   mode: 'development',
   entry: {
-    api: './src/api/api.ts',
+    api: './src/server/api.ts',
   },
   output: {
     filename: '[name].js',
-    path: path.resolve(__dirname, '../build/api'),
+    path: path.resolve(__dirname, '../build/server'),
   },
   module: {
     rules: [
