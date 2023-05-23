@@ -1,8 +1,11 @@
-import Adult from '../data/adult.json';
-import Misc from '../data/misc.json';
-import Sports from '../data/sports.json';
-import Animals from '../data/animals.json';
-import Entertainment from '../data/entertainment.json';
+import { type SECRET_BANK } from './server/game';
+
+export const DEFAULT_SECRET_CATEGORIES: Array<keyof typeof SECRET_BANK> = [
+  'Animals',
+  'Entertainment',
+  'Misc',
+  'Sports',
+];
 
 export type Maybe<T> = T | undefined | null;
 
@@ -17,18 +20,28 @@ export const TimeLimit = {
 
 export type TimeLimit = (typeof TimeLimit)[keyof typeof TimeLimit];
 
-export const Color = {
-  Blue: 'hsl(228, 79%, 69%)',
-  Red: 'hsl(1, 100%, 62%)',
-  Orange: 'hsl(20, 100%, 61%)',
-  Yellow: 'hsl(46, 100%, 50%)',
-  Pink: 'hsl(350, 100%, 73%)',
-  Purple: 'hsl(288, 76%, 69%)',
+export const Colors = {
+  0: { name: 'Blue', value: 'hsl(228, 79%, 69%)' },
+  1: { name: 'Red', value: 'hsl(1, 100%, 62%)' },
+  2: { name: 'Orange', value: 'hsl(20, 100%, 61%)' },
+  3: { name: 'Yellow', value: 'hsl(46, 100%, 50%)' },
+  4: { name: 'Pink', value: 'hsl(350, 100%, 73%)' },
+  5: { name: 'Purple', value: 'hsl(288, 76%, 69%)' },
 } as const;
 
-export type TeamColor = keyof typeof Color;
+export type Color = keyof typeof Colors;
 
-export type Color = (typeof Color)[TeamColor];
+export function colorName<TColor extends Color>(
+  color: TColor,
+): (typeof Colors)[TColor]['name'] {
+  return Colors[color]?.['name'];
+}
+
+export function colorValue<TColor extends Color>(
+  color: TColor,
+): (typeof Colors)[TColor]['value'] {
+  return Colors[color]?.['value'];
+}
 
 export const DecodeMethod = {
   First: 0,
@@ -60,17 +73,13 @@ export const defaultGameConfigWithoutCategories: Omit<
   allowExtraDecode: true,
 };
 
-export type ID = string;
-
-export interface PlayerStats {
-  wins: number;
-  losses: number;
-  winsAsEncoder: number;
-  encoderAvgSecretKeyTime: number;
-}
+export const DEFAULT_GAME_CONFIG: GameConfig = {
+  ...defaultGameConfigWithoutCategories,
+  categories: DEFAULT_SECRET_CATEGORIES,
+};
 
 export interface Team {
-  color: TeamColor;
+  color: Color;
   players: Array<string>;
 }
 
@@ -84,21 +93,20 @@ export function LobbyCode(code: Maybe<string>) {
 }
 
 export interface Lobby {
-  code: LobbyCode;
-  leader: Maybe<string>;
+  leader: string;
   activeGame?: Maybe<Game>;
   teams: Array<Team>;
 }
 
-export type GameID = ID;
-
 export type Game = {
-  id: GameID;
   config: GameConfig;
-  encodingTeamColor: TeamColor;
+  activeTeam: Color;
+  encodeStartTime?: Maybe<number>; // seconds since epoch
+  decodeStartTime?: Maybe<number>; // seconds since epoch
   secrets: Array<Secret>;
   signal?: Maybe<string>;
   secretCount?: Maybe<number>;
+  eliminatedTeams?: Maybe<Array<Color>>;
 };
 
 export const SecretType = {
@@ -109,8 +117,16 @@ export const SecretType = {
 
 export type SecretType = (typeof SecretType)[keyof typeof SecretType];
 
+export const ErrorCode = {
+  LobbyNotFound: 0,
+  GameInProgress: 1,
+  Unknown: -1,
+} as const;
+
+export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
+
 export interface DecodeAttempt {
-  teamColor: TeamColor;
+  teamColor: Color;
   players: Array<string>;
 }
 
@@ -118,11 +134,11 @@ export type Secret = {
   value: string;
 } & (
   | {
-      isDecoded: 1;
-      decodeAttempt: DecodeAttempt;
+      decodeTeamColor?: Maybe<Color>;
+      decodeAttempt?: never;
     }
   | {
-      isDecoded?: 0;
+      decodeTeamColor?: never;
       decodeAttempt?: Maybe<DecodeAttempt>;
     }
 ) &
@@ -130,7 +146,7 @@ export type Secret = {
     | // team secret
     {
         type: typeof SecretType.Secret;
-        teamColor: TeamColor;
+        teamColor: Color;
       }
     // null or virus
     | {
@@ -139,20 +155,24 @@ export type Secret = {
   );
 
 export const Route = {
-  Categories: '/categories',
   Index: '/',
+  Categories: '/categories',
   LobbyCreate: '/lobby/create',
   Lobby: '/:lobbyCode',
   LobbyJoin: '/:lobbyCode/join',
   LobbyLeave: '/:lobbyCode/leave',
-  TeamJoin: '/:lobbyCode/:teamColor/join',
-  TeamEncoderPromote: '/:lobbyCode/:teamColor/promote',
-  TeamEncoderDemote: '/:lobbyCode/:teamColor/demote',
-  GameConfigure: '/:lobbyCode/configure',
-  GameStart: '/:lobbyCode/start',
-  SecretEncode: '/:lobbyCode/encode',
-  SecretDecode: '/:lobbyCode/decode',
-  SecretDecodeCancel: '/:lobbyCode/decode-cancel',
+  LobbyDisband: '/:lobbyCode/disband',
+  LobbyState: '/:lobbyCode/stats',
+  LobbyTeamJoin: '/:lobbyCode/:teamColor/join',
+  LobbyTeamEncoderPromote: '/:lobbyCode/:teamColor/promote',
+  LobbyTeamEncoderDemote: '/:lobbyCode/:teamColor/demote',
+  Game: '/:lobbyCode/game',
+  GameConfigure: '/:lobbyCode/game/configure',
+  GameStart: '/:lobbyCode/game/start',
+  GameSecretEncode: '/:lobbyCode/game/encode',
+  GameSecretDecode: '/:lobbyCode/game/decode',
+  GameSecretDecodeCancel: '/:lobbyCode/game/decode-cancel',
+  GameSecretDecodeSkip: '/:lobbyCode/game/decode-skip',
 } as const;
 
 export interface CategoriesResponse {
@@ -163,22 +183,6 @@ export interface LobbyCreateResponse {
   lobbyCode: LobbyCode;
 }
 
-export interface LobbyLeaveResponse {}
-
-export interface TeamJoinResponse {}
-
-export interface TeamEncoderPromoteResponse {}
-
-export interface TeamEncoderDemoteResponse {}
-
-export interface GameStartResponse {}
-
-export interface SecretEncodeResponse {}
-
-export interface SecretDecodeResponse {}
-
-export interface SecretDecodeCancelResponse {}
-
 export function objectKeys<TObject extends object>(
   object: TObject,
 ): Array<keyof TObject> {
@@ -187,37 +191,31 @@ export function objectKeys<TObject extends object>(
 
 export const API_PORT = process.env['PORT'] as string;
 
-const usedLobbyCodes = new Set<LobbyCode>();
-const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
-export function createLobbyCode(): LobbyCode {
-  let code: LobbyCode;
-  do {
-    code = Array.from(
-      { length: 4 },
-      () => chars[Math.floor(Math.random() * chars.length)],
-    ).join('');
-  } while (usedLobbyCodes.has(code));
-  usedLobbyCodes.add(code);
-  return code;
+export function createLobby(leaderName: string): Lobby {
+  return {
+    leader: leaderName,
+    activeGame: null,
+    teams: objectKeys(Colors).map((color, index) => ({
+      color: Number(color) as Color,
+      players: index === 0 ? [leaderName] : [],
+    })),
+  };
 }
 
-export const SECRET_BANK = {
-  Animals,
-  Entertainment,
-  Misc,
-  Sports,
-  Adult,
-};
-
-export const DEFAULT_SECRET_CATEGORIES: Array<keyof typeof SECRET_BANK> = [
-  'Animals',
-  'Entertainment',
-  'Misc',
-  'Sports',
-];
-
-export const DEFAULT_GAME_CONFIG: GameConfig = {
-  ...defaultGameConfigWithoutCategories,
-  categories: DEFAULT_SECRET_CATEGORIES,
-};
+export function getWinningTeam(lobby: Lobby) {
+  const game = lobby.activeGame;
+  if (game == null) {
+    return null;
+  }
+  return lobby.teams.find(team => {
+    const teamSecrets = game.secrets.filter(secret => {
+      return (
+        secret.type === SecretType.Secret && secret.teamColor === team.color
+      );
+    });
+    if (teamSecrets.length === 0) {
+      return false;
+    }
+    return teamSecrets.every(secret => secret.decodeTeamColor != null);
+  });
+}

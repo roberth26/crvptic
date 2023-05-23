@@ -1,12 +1,5 @@
 import React from 'react';
-import {
-  Form,
-  generatePath,
-  Link,
-  useLoaderData,
-  useParams,
-} from 'react-router-dom';
-import invariant from 'ts-invariant';
+import { Form, generatePath, Link, useLoaderData } from 'react-router-dom';
 import {
   DecodeMethod,
   defaultGameConfigWithoutCategories,
@@ -14,13 +7,11 @@ import {
   TimeLimit,
   type CategoriesResponse,
 } from '../../common';
-import { useLobby } from './Lobby';
+import { useLobbyCode, usePlayerName } from '../components/LobbyLayout';
 
 export function GameConfigure() {
-  const { lobbyCode } = useParams();
-  invariant(lobbyCode, 'lobbyCode missing');
-  const { playerName } = useLobby();
-  invariant(playerName, 'playerName missing');
+  const lobbyCode = useLobbyCode();
+  const playerName = usePlayerName();
   const { categories: categoriesRaw } = useLoaderData() as CategoriesResponse;
   const categories = categoriesRaw.map(({ category }) => category);
   const defaultCategories = categoriesRaw.flatMap(({ category, isDefault }) =>

@@ -1,25 +1,20 @@
-import { type GameConfig, type Maybe, type TeamColor } from '../common';
+import { type GameConfig, type Maybe, type Color } from '../common';
 
 export const EventType = {
-  CreateLobby: 'CREATE_LOBBY',
   StartGame: 'START_GAME',
   JoinLobby: 'JOIN_LOBBY',
   LeaveLobby: 'LEAVE_LOBBY',
+  DisbandLobby: 'DISBAND_LOBBY',
   JoinTeam: 'JOIN_TEAM',
   DemoteEncoder: 'DEMOTE_ENCODER',
   PromoteEncoder: 'PROMOTE_ENCODER',
   EncodeSecret: 'ENCODE_SECRET',
   DecodeSecret: 'DECODE_SECRET',
   CancelDecodeSecret: 'CANCEL_DECODE_SECRET',
+  SkipDecoding: 'SKIP_DECODING',
 } as const;
 
 export const Events = {
-  CreateLobby: function createLobby(payload: { leaderName: string }) {
-    return {
-      type: EventType.CreateLobby,
-      payload,
-    } as const;
-  },
   StartGame: function startGame(payload: { config: Partial<GameConfig> }) {
     return {
       type: EventType.StartGame,
@@ -28,7 +23,7 @@ export const Events = {
   },
   JoinLobby: function joinLobby(payload: {
     playerName: string;
-    teamColor?: Maybe<TeamColor>;
+    teamColor?: Maybe<Color>;
   }) {
     return {
       type: EventType.JoinLobby,
@@ -41,9 +36,15 @@ export const Events = {
       payload,
     } as const;
   },
+  DisbandLobby: function disbandLobby(payload: { playerName: string }) {
+    return {
+      type: EventType.DisbandLobby,
+      payload,
+    } as const;
+  },
   JoinTeam: function joinTeam(payload: {
     playerName: string;
-    teamColor: TeamColor;
+    teamColor: Color;
   }) {
     return {
       type: EventType.JoinTeam,
@@ -87,6 +88,12 @@ export const Events = {
   }) {
     return {
       type: EventType.CancelDecodeSecret,
+      payload,
+    } as const;
+  },
+  SkipDecoding: function skipDecoding(payload: { playerName: string }) {
+    return {
+      type: EventType.SkipDecoding,
       payload,
     } as const;
   },

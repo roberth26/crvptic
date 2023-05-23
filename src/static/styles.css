@@ -8,7 +8,7 @@
   --bg-color-3: hsl(var(--bg-color-3-hsl));
 
   --primary-accent-color-hsl: 172deg 75% 50%;
-  --secondary-accent-color-hsl: 172deg 75% 50%;
+  --secondary-accent-color-hsl: 172deg 75% 30%;
 
   --primary-accent-color: hsl(var(--primary-accent-color-hsl));
   --secondary-accent-color: hsl(var(--secondary-accent-color-hsl));
@@ -178,13 +178,22 @@ hr {
   margin: var(--unit-2) 0;
 }
 
+.player-team {
+  color: var(--player-team-color);
+}
+
+.leader-team {
+  color: var(--leader-team-color);
+}
+
+.active-team {
+  color: var(--active-team-color);
+}
+
 @media screen and (max-width: 640px) {
   :root {
-    --font-size-1: 1.8rem;
-  }
-
-  .container {
-    padding: 0 var(--unit-4);
+    --font-size-1: 1.5rem;
+    --unit-1: 3px;
   }
 }
 
@@ -258,9 +267,28 @@ hr {
 
 .Layout_header {
   display: grid;
-  padding-top: var(--unit-5);
-  padding-bottom: var(--unit-5);
   background-color: var(--primary-accent-color);
+  color: var(--accent-text-color);
+  height: 56px;
+}
+
+.Layout_header_content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.Layout_header form {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--unit-5);
+}
+
+.Layout_header button {
+  border-color: hsl(var(--bg-color-2-hsl) / 75%);
+  padding: var(--unit-2) var(--unit-4);
+  color: inherit;
 }
 
 .Layout_content {
@@ -271,13 +299,21 @@ hr {
 
 #logo {
   font-size: var(--font-size-1);
-  line-height: 1;
   margin: 0;
   color: var(--accent-text-color);
+  margin-top: var(--unit-5);
+  margin-bottom: var(--unit-5);
 }
 
 #logo {
   text-decoration: none;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
 }
 
 .LobbyMenu {
@@ -349,7 +385,7 @@ hr {
 
 .Team_header:active,
 .Team_header:hover {
-  background-color: var(--teamColor) !important;
+  background-color: var(--team-color) !important;
   color: var(--accent-text-color) !important;
 }
 
@@ -360,7 +396,7 @@ hr {
   left: 0;
   height: 100%;
   width: var(--unit-3);
-  background-color: var(--teamColor);
+  background-color: var(--team-color);
 }
 
 .Team_member {
@@ -377,7 +413,7 @@ hr {
   background-color: var(--bg-color-3);
 }
 
-.Team_member.leader {
+.Team_member.player {
   color: var(--primary-accent-color);
 }
 
@@ -402,15 +438,23 @@ hr {
 
 .Secret {
   justify-content: space-between;
-  background-color: var(--bg-color-3);
+  background-color: var(--bg-color-3) !important;
   border: 0;
   color: var(--primary-text-color) !important;
 }
 
-.Secret:not(:disabled):hover,
-.Secret:not(:disabled):active {
-  background-color: var(--teamColor) !important;
+.Secret.encoder {
+  background-color: var(--secret-team-color) !important;
   color: var(--accent-text-color) !important;
+}
+
+.Secret.encoder.null {
+  background-color: var(--bg-color-3) !important;
+  color: var(--primary-text-color) !important;
+}
+
+.Secret.encoder.virus {
+  background-color: var(--primary-accent-color) !important;
 }
 
 .Secret.decoded {
@@ -426,18 +470,39 @@ hr {
   left: 0;
   height: 100%;
   width: var(--unit-3);
-  background-color: var(--teamColor);
+  background-color: var(--secret-team-color);
+}
+
+.Secret.decoded.null::before {
+  background-color: var(--bg-color-3);
+}
+
+.Secret.decoded.virus::before {
+  background-color: var(--primary-accent-color);
+}
+
+.Secret.decoded.virus {
+  text-decoration: none;
+  color: var(--primary-accent-color) !important;
+}
+
+.Game_controls {
+  box-shadow: 0 0 12px var(--bg-color-1);
+  z-index: 9;
+}
+
+.Game_controls_infobar {
+  padding: var(--unit-2) 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .Encoder {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--unit-4);
   align-items: end;
-  border-top: 2px solid hsl(var(--bg-color-2-hsl) / 75%);
-  padding-top: var(--unit-4);
-  box-shadow: 0 0 12px var(--bg-color-1);
-  z-index: 9;
   position: relative;
 }
 

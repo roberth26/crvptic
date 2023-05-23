@@ -1,4 +1,4 @@
-import Express from 'express';
+import Express, { ErrorRequestHandler, RequestHandler } from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import {
@@ -6,24 +6,16 @@ import {
   Route,
   type LobbyCreateResponse,
   type Lobby,
-  type TeamJoinResponse,
-  type TeamColor,
-  type TeamEncoderDemoteResponse,
-  type TeamEncoderPromoteResponse,
+  type Color,
   type CategoriesResponse,
   type GameConfig,
   type DecodeMethod,
-  type GameStartResponse,
-  type LobbyLeaveResponse,
-  type SecretEncodeResponse,
-  type SecretDecodeResponse,
-  type SecretDecodeCancelResponse,
-  DEFAULT_SECRET_CATEGORIES,
   objectKeys,
-  SECRET_BANK,
+  DEFAULT_SECRET_CATEGORIES,
 } from '../common';
 import { CrypticStore } from './store';
-import { Events, EventType } from './events';
+import { Events } from './events';
+import { SECRET_BANK } from './game';
 
 const store = new CrypticStore();
 const app = Express();
@@ -31,18 +23,27 @@ const app = Express();
 app.use(cors({ origin: true }));
 app.use(multer().any());
 
+const auth: RequestHandler = (req, _res, next) => {
+  const { lobbyCode } = req.params;
+  if (lobbyCode) {
+    store.ensurePlayer(lobbyCode, req.body?.playerName);
+  }
+  next();
+};
+
+const defaultCategories = new Set(DEFAULT_SECRET_CATEGORIES);
+const categoriesResponse: CategoriesResponse = {
+  categories: objectKeys(SECRET_BANK).map(category => {
+    const isDefault = defaultCategories.has(category);
+    return {
+      category,
+      ...(isDefault && { isDefault: 1 }),
+    };
+  }),
+};
+
 app.get(Route.Categories, (_req, res) => {
-  const defaultCategories = new Set(DEFAULT_SECRET_CATEGORIES);
-  const response: CategoriesResponse = {
-    categories: objectKeys(SECRET_BANK).map(category => {
-      const isDefault = defaultCategories.has(category);
-      return {
-        category,
-        ...(isDefault && { isDefault: 1 }),
-      };
-    }),
-  };
-  res.json(response);
+  res.json(categoriesResponse);
 });
 
 app.post(Route.LobbyCreate, (req, res) => {
@@ -87,7 +88,7 @@ app.get(Route.Lobby, (req, res) => {
   });
 });
 
-app.put(Route.LobbyLeave, (req, res) => {
+app.put(Route.LobbyLeave, auth, (req, res) => {
   const { lobbyCode } = req.params;
   const { playerName } = req.body;
   const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
@@ -96,11 +97,10 @@ app.put(Route.LobbyLeave, (req, res) => {
     return;
   }
   lobby.send(Events.LeaveLobby({ playerName }));
-  const response: LobbyLeaveResponse = {};
-  res.json(response);
+  res.end();
 });
 
-app.put(Route.TeamJoin, (req, res) => {
+app.put(Route.LobbyTeamJoin, auth, (req, res) => {
   const { lobbyCode, teamColor } = req.params;
   const { playerName } = req.body;
   const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
@@ -111,14 +111,13 @@ app.put(Route.TeamJoin, (req, res) => {
   lobby.send(
     Events.JoinTeam({
       playerName,
-      teamColor: teamColor as TeamColor,
+      teamColor: Number(teamColor) as Color,
     }),
   );
-  const response: TeamJoinResponse = {};
-  res.json(response);
+  res.end();
 });
 
-app.put(Route.TeamEncoderDemote, (req, res) => {
+app.put(Route.LobbyTeamEncoderDemote, auth, (req, res) => {
   const { lobbyCode } = req.params;
   const { playerName } = req.body;
   const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
@@ -131,11 +130,10 @@ app.put(Route.TeamEncoderDemote, (req, res) => {
       playerName,
     }),
   );
-  const response: TeamEncoderDemoteResponse = {};
-  res.json(response);
+  res.end();
 });
 
-app.put(Route.TeamEncoderPromote, (req, res) => {
+app.put(Route.LobbyTeamEncoderPromote, auth, (req, res) => {
   const { lobbyCode } = req.params;
   const { playerName } = req.body;
   const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
@@ -148,11 +146,10 @@ app.put(Route.TeamEncoderPromote, (req, res) => {
       playerName,
     }),
   );
-  const response: TeamEncoderPromoteResponse = {};
-  res.json(response);
+  res.end();
 });
 
-app.post(Route.GameStart, (req, res) => {
+app.post(Route.GameStart, auth, (req, res) => {
   const { lobbyCode } = req.params;
   const { playerName } = req.body;
   const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
@@ -179,12 +176,12 @@ app.post(Route.GameStart, (req, res) => {
       : {}),
     ...(req.body.categories && { categories: req.body.categories }),
   };
+  // TODO: make sure only encoder does this in saga
   lobby.send(Events.StartGame({ config }));
-  const response: GameStartResponse = {};
-  res.json(response);
+  res.end();
 });
 
-app.put(Route.SecretEncode, (req, res) => {
+app.put(Route.GameSecretEncode, auth, (req, res) => {
   const { lobbyCode } = req.params;
   const { playerName, signal, secretCount } = req.body;
   const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
@@ -204,11 +201,10 @@ app.put(Route.SecretEncode, (req, res) => {
       secretCount: Number(secretCount),
     }),
   );
-  const response: SecretEncodeResponse = {};
-  res.json(response);
+  res.end();
 });
 
-app.put(Route.SecretDecode, (req, res) => {
+app.put(Route.GameSecretDecode, auth, (req, res) => {
   const { lobbyCode } = req.params;
   const { playerName, secret } = req.body;
   const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
@@ -222,11 +218,10 @@ app.put(Route.SecretDecode, (req, res) => {
       secret,
     }),
   );
-  const response: SecretDecodeResponse = {};
-  res.json(response);
+  res.end();
 });
 
-app.put(Route.SecretDecodeCancel, (req, res) => {
+app.put(Route.GameSecretDecodeCancel, auth, (req, res) => {
   const { lobbyCode } = req.params;
   const { playerName, secret } = req.body;
   const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
@@ -240,9 +235,47 @@ app.put(Route.SecretDecodeCancel, (req, res) => {
       secret,
     }),
   );
-  const response: SecretDecodeCancelResponse = {};
-  res.json(response);
+  res.end();
 });
+
+app.put(Route.GameSecretDecodeSkip, auth, (req, res) => {
+  const { lobbyCode } = req.params;
+  const { playerName } = req.body;
+  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
+  if (lobby == null || !Boolean(playerName)) {
+    res.end();
+    return;
+  }
+  lobby.send(
+    Events.SkipDecoding({
+      playerName,
+    }),
+  );
+  res.end();
+});
+
+app.delete(Route.LobbyDisband, auth, (req, res) => {
+  const { lobbyCode } = req.params;
+  const { playerName } = req.body;
+  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
+  if (lobby == null || !Boolean(playerName)) {
+    res.end();
+    return;
+  }
+  lobby.send(
+    Events.DisbandLobby({
+      playerName,
+    }),
+  );
+  res.end();
+});
+
+const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
+  console.log(error);
+  res.status(500).send('Error');
+};
+
+app.use(errorHandler);
 
 const server = app.listen(API_PORT);
 

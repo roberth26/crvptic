@@ -1,81 +1,167 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-import { Outlet, useLoaderData, useParams } from 'react-router-dom';
-import invariant from 'ts-invariant';
-import { type Maybe, type Lobby } from '../../common';
-import { Game } from './Game';
-
-interface State {
-  lobby: Maybe<Lobby>;
-  playerName: Maybe<string>;
-}
-
-type LobbyContext = State;
-
-const LobbyContext = createContext<LobbyContext | null>(null);
-
-export function useLobby(): LobbyContext {
-  const lobbyContext = useContext(LobbyContext);
-  invariant(lobbyContext != null, 'lobbyContext nullish');
-  return lobbyContext;
-}
+import React, { memo, useMemo } from 'react';
+import { Form, generatePath, Link, useFetcher } from 'react-router-dom';
+import {
+  type Team,
+  Colors,
+  objectKeys,
+  Route,
+  colorValue,
+  colorName,
+  type Color,
+} from '../../common';
+import {
+  useLeaderTeam,
+  useLobby,
+  useLobbyCode,
+  usePlayerName,
+} from '../components/LobbyLayout';
 
 export function Lobby() {
-  const eventSource = useLoaderData() as EventSource;
-  const { lobbyCode } = useParams();
-  invariant(lobbyCode, 'lobbyCode nullish');
-  const [lobby, setLobby] = useState<State['lobby']>(null);
-  const [playerName] = useState<State['playerName']>(() => {
-    return new URL(eventSource.url).searchParams.get('playerName');
-  });
+  const lobbyCode = useLobbyCode();
+  const playerName = usePlayerName();
+  const leaderTeam = useLeaderTeam();
+  const { leader, teams } = useLobby();
+  const isLeader = leader === playerName;
 
-  useEffect(() => {
-    const handleMessage = ({ data: newLobbyStr }: MessageEvent) => {
-      setLobby(prevLobby => {
-        const prevLobbyStr = JSON.stringify(prevLobby);
-        if (prevLobbyStr === newLobbyStr) {
-          return prevLobby;
-        }
-        return JSON.parse(newLobbyStr);
-      });
-    };
-    eventSource.addEventListener('message', handleMessage);
-    return () => {
-      eventSource.removeEventListener('message', handleMessage);
-    };
-  }, [eventSource, lobbyCode, playerName]);
-
-  const context = useMemo<LobbyContext>(
-    () => ({
-      lobby,
-      playerName,
-    }),
-    [lobby, playerName],
-  );
+  const allTeams = useMemo(() => {
+    return objectKeys(Colors)
+      .map(color => Number(color) as Color)
+      .map(
+        (color): Team => ({
+          color,
+          players: teams.find(team => team.color === color)?.players ?? [],
+        }),
+      );
+  }, [teams]);
 
   return (
-    <LobbyContext.Provider value={context}>
-      {lobby == null ? (
-        <div
-          style={{
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+    <div className="LobbyMenu">
+      <Form className="LobbyMenu_controls">
+        <input
+          hidden={true}
+          name="playerName"
+          value={playerName}
+          readOnly={true}
+        />
+        {isLeader ? (
+          <>
+            <button
+              className="bordered"
+              formMethod="post"
+              formAction={generatePath(Route.GameStart, { lobbyCode })}
+            >
+              Start game
+            </button>
+            <Link
+              role="button"
+              to={generatePath(Route.GameConfigure, { lobbyCode })}
+              className="bordered"
+            >
+              Configure custom game
+            </Link>
+          </>
+        ) : (
+          <span>
+            Waiting for&nbsp;
+            <span
+              className="leader-team"
+              style={{
+                // @ts-ignore
+                '--leader-team-color': colorValue(leaderTeam.color),
+              }}
+            >
+              {leader}
+            </span>
+            &nbsp;to start a game.
+          </span>
+        )}
+        <hr />
+        <button
+          className="bordered"
+          formMethod="put"
+          formAction={generatePath(Route.LobbyLeave, { lobbyCode })}
         >
-          Loading...
-        </div>
-      ) : lobby.activeGame ? (
-        <Game />
-      ) : (
-        <Outlet />
-      )}
-    </LobbyContext.Provider>
+          Leave lobby
+        </button>
+        {isLeader && (
+          <button
+            className="bordered"
+            formMethod="delete"
+            formAction={generatePath(Route.LobbyDisband, { lobbyCode })}
+          >
+            Disband lobby
+          </button>
+        )}
+      </Form>
+      <div className="LobbyMenu_teams">
+        {allTeams.map(team => (
+          <Team key={team.color} team={team} />
+        ))}
+      </div>
+    </div>
   );
 }
+
+const Team = memo(({ team }: { team: Team }) => {
+  const fetcher = useFetcher();
+  const lobbyCode = useLobbyCode();
+  const playerName = usePlayerName();
+  const teamColor = team.color;
+  const isMember = team.players.includes(playerName);
+  const isEncoder = team.players[0] === playerName;
+  const canJoin = !isMember;
+  const canPromote = isMember && !isEncoder;
+  const canDemote = isMember && isEncoder && team.players.length > 1;
+  const formAction = canDemote
+    ? generatePath(Route.LobbyTeamEncoderDemote, {
+        lobbyCode,
+        teamColor: String(teamColor),
+      })
+    : canPromote
+    ? generatePath(Route.LobbyTeamEncoderPromote, {
+        lobbyCode,
+        teamColor: String(teamColor),
+      })
+    : canJoin
+    ? generatePath(Route.LobbyTeamJoin, {
+        lobbyCode,
+        teamColor: String(teamColor),
+      })
+    : undefined;
+
+  return (
+    <article className="Team">
+      <fetcher.Form method="put">
+        <button
+          className="Team_header"
+          formAction={formAction}
+          name="playerName"
+          value={playerName}
+          disabled={!canDemote && !canPromote && !canJoin}
+          style={{
+            // @ts-ignore
+            '--team-color': colorValue(teamColor),
+          }}
+        >
+          <span>{colorName(teamColor)} team</span>
+          {canDemote && <span>Demote</span>}
+          {canPromote && <span>Promote</span>}
+          {canJoin && <span>Join</span>}
+        </button>
+      </fetcher.Form>
+      {team.players.map(player => {
+        const isPlayer = player === playerName;
+        const isEncoder = player === team.players[0];
+        return (
+          <div
+            key={player}
+            className={`Team_member ${isPlayer ? 'player' : ''}`}
+          >
+            <span>{player}</span>
+            {isEncoder && <span className="encoder">📟</span>}
+          </div>
+        );
+      })}
+    </article>
+  );
+});
