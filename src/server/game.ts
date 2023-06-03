@@ -12,16 +12,17 @@ import {
 import invariant from 'ts-invariant';
 import shuffleArray from 'shuffle-array';
 import { produce } from 'immer';
-import { EventType, type Event } from './events';
 import {
-  Color,
+  type Color,
   DecodeMethod,
   DEFAULT_GAME_CONFIG,
   getWinningTeam,
-  Lobby,
-  Maybe,
-  Secret,
+  type Lobby,
+  type Maybe,
+  type Secret,
   SecretType,
+  EventType,
+  type Event,
 } from '../common';
 import Animals from '../../data/Animals.json';
 import Entertainment from '../../data/Entertainment.json';
@@ -169,7 +170,7 @@ function getDecodeTimeLimitMs(lobby: Lobby) {
   return game.config.decodeTimeLimit * 1000;
 }
 
-function joinLobby({ payload: { playerName } }: Event<'JoinLobby'>) {
+function joinLobby({ playerName }: Event<'JoinLobby'>) {
   return produce((lobby: Lobby) => {
     const isPresent = lobby.teams.some(team =>
       team.players.includes(playerName),
@@ -184,48 +185,51 @@ function joinLobby({ payload: { playerName } }: Event<'JoinLobby'>) {
   });
 }
 
-// TODO: optimize
-function leaveLobby({ payload: { playerName } }: Event<'LeaveLobby'>) {
+function leaveLobby({ playerName }: Event<'LeaveLobby'>) {
   return produce((lobby: Lobby) => {
-    const nonEmptyTeams = lobby.teams.filter(team => team.players.length >= 2);
-    const teamIndex = nonEmptyTeams.findIndex(team =>
-      team.players.includes(playerName),
-    );
-    if (teamIndex < 0) {
+    const team = lobby.teams.find(team => team.players.includes(playerName));
+    if (team == null) {
       return;
     }
-    const team = nonEmptyTeams[teamIndex]!;
+    // remove player
     team.players = team.players.filter(player => player !== playerName);
-    if (team.players.length === 0) {
-      const game = lobby.activeGame;
-      if (game) {
-        game.secrets = game.secrets.filter(
-          secret =>
-            secret.type !== SecretType.Secret ||
-            secret.teamColor === team.color,
-        );
-        const isTeamActive = game.activeTeam === team.color;
-        if (isTeamActive) {
-          game.activeTeam =
-            nonEmptyTeams[
-              teamIndex + 1 >= nonEmptyTeams.length ? 0 : teamIndex + 1
-            ]?.color ?? lobby.teams[0]!.color;
-          game.encodeStartTime = Math.floor(Date.now() / 1000);
-        }
-      }
-    }
+    // update leader
     if (playerName === lobby.leader) {
-      const newLeader = [team, ...nonEmptyTeams]
+      const newLeader = lobby.teams
         .flatMap(team => team.players)
         .find(player => player !== playerName);
+
       if (newLeader) {
-        lobby.leader;
+        lobby.leader = newLeader;
       }
+    }
+    const game = lobby.activeGame;
+    if (!game) {
+      return;
+    }
+    // remove secrets
+    const isTeamEmpty = team.players.length === 0;
+    if (isTeamEmpty) {
+      game.secrets = game.secrets.filter(
+        secret =>
+          secret.type !== SecretType.Secret || secret.teamColor !== team.color,
+      );
+    }
+    // update active team
+    const isTeamActive = game.activeTeam === team.color;
+    const shouldRotate = isTeamEmpty && isTeamActive;
+    if (shouldRotate) {
+      const teamIndex = lobby.teams.indexOf(team);
+      const nextTeam =
+        lobby.teams[teamIndex + 1 >= lobby.teams.length ? 0 : teamIndex + 1];
+      invariant(nextTeam);
+      game.activeTeam = nextTeam.color;
+      game.encodeStartTime = Math.floor(Date.now() / 1000);
     }
   });
 }
 
-function joinTeam({ payload: { playerName, teamColor } }: Event<'JoinTeam'>) {
+function joinTeam({ playerName, teamColor }: Event<'JoinTeam'>) {
   return produce((lobby: Lobby) => {
     const currTeam = lobby.teams.find(team =>
       team.players.includes(playerName),
@@ -239,7 +243,7 @@ function joinTeam({ payload: { playerName, teamColor } }: Event<'JoinTeam'>) {
   });
 }
 
-function demoteEncoder({ payload: { playerName } }: Event<'DemoteEncoder'>) {
+function demoteEncoder({ playerName }: Event<'DemoteEncoder'>) {
   return produce((lobby: Lobby) => {
     const team = lobby.teams.find(team => team.players.includes(playerName));
     if (team == null || team.players.length === 1) {
@@ -249,7 +253,7 @@ function demoteEncoder({ payload: { playerName } }: Event<'DemoteEncoder'>) {
   });
 }
 
-function promoteEncoder({ payload: { playerName } }: Event<'PromoteEncoder'>) {
+function promoteEncoder({ playerName }: Event<'PromoteEncoder'>) {
   return produce((lobby: Lobby) => {
     const team = lobby.teams.find(team => team.players.includes(playerName));
     if (team == null) {
@@ -266,7 +270,12 @@ function promoteEncoder({ payload: { playerName } }: Event<'PromoteEncoder'>) {
   });
 }
 
-function startGame({ payload: { config } }: Event<'StartGame'>) {
+function startGame({
+  type: _type,
+  lobbyCode: _lobbyCode,
+  playerName: _playerName,
+  ...config
+}: Event<'StartGame'>) {
   return produce((lobby: Lobby) => {
     const gameConfig = {
       ...DEFAULT_GAME_CONFIG,
@@ -333,9 +342,7 @@ function endGame() {
   });
 }
 
-function encodeSecret({
-  payload: { signal, secretCount },
-}: Event<'EncodeSecret'>) {
+function encodeSecret({ signal, secretCount }: Event<'EncodeSecret'>) {
   return produce((lobby: Lobby) => {
     const activeGame = lobby.activeGame;
     if (activeGame == null) {
@@ -348,9 +355,7 @@ function encodeSecret({
   });
 }
 
-function decodeSecret({
-  payload: { playerName, secret },
-}: Event<'DecodeSecret'>) {
+function decodeSecret({ playerName, secret }: Event<'DecodeSecret'>) {
   return produce((lobby: Lobby) => {
     const activeGame = lobby.activeGame;
     if (activeGame == null) {
@@ -449,7 +454,8 @@ function decodeSecret({
 }
 
 function cancelDecodeSecret({
-  payload: { playerName, secret },
+  playerName,
+  secret,
 }: Event<'CancelDecodeSecret'>) {
   return produce((lobby: Lobby) => {
     const activeGame = lobby.activeGame;
@@ -505,7 +511,7 @@ function endTurn() {
   });
 }
 
-function skipDecoding({ payload: { playerName } }: Event<'SkipDecoding'>) {
+function skipDecoding({ playerName }: Event<'SkipDecoding'>) {
   return produce((lobby: Lobby) => {
     const game = lobby.activeGame;
     if (game == null) {

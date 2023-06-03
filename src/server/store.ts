@@ -1,30 +1,29 @@
 import EventEmitter from 'eventemitter3';
-import { runSaga, stdChannel, Task } from 'redux-saga';
-import { createLobby, LobbyCode, type Lobby, Maybe } from '../common';
-import { EventType, type Event } from './events';
-import { root } from './game';
+import { runSaga, stdChannel } from 'redux-saga';
 import invariant from 'ts-invariant';
+import {
+  createLobby,
+  type LobbyCode,
+  type Lobby,
+  type Maybe,
+  type Event,
+  EventType,
+} from '../common';
+import { root } from './game';
 
 const TICK_RATE_HZ = 5;
 
-export class CrypticStore {
+export class CrvpticStore {
   private lobbyStores = new Map<LobbyCode, LobbyStore>();
 
   createLobby = (leaderName: string) => {
     const lobbyStore = new LobbyStore(leaderName);
-    const lobbyCode = CrypticStore.createLobbyCode();
+    const lobbyCode = CrvpticStore.createLobbyCode();
     this.lobbyStores.set(lobbyCode, lobbyStore);
-    return lobbyCode;
-  };
-
-  getLobby = (lobbyCode: LobbyCode) => {
-    return this.lobbyStores.get(lobbyCode.toUpperCase());
-  };
-
-  dispose = () => {
-    this.lobbyStores.forEach(lobbyStore => {
-      lobbyStore.dispose();
+    lobbyStore.once('DISPOSE', () => {
+      this.lobbyStores.delete(lobbyCode);
     });
+    return lobbyCode;
   };
 
   ensurePlayer = (lobbyCode: LobbyCode, playerName: Maybe<string>) => {
@@ -33,6 +32,26 @@ export class CrypticStore {
       this.lobbyStores.get(lobbyCode)?.hasPlayer(playerName),
       `lobby code=${lobbyCode} does not include ${playerName}`,
     );
+  };
+
+  getLobby = (lobbyCode: LobbyCode, playerName: Maybe<string>) => {
+    this.ensurePlayer(lobbyCode, playerName);
+    const lobby = this.lobbyStores.get(lobbyCode.toUpperCase());
+    invariant(lobby);
+    return lobby;
+  };
+
+  dispose = () => {
+    this.lobbyStores.forEach(lobbyStore => {
+      lobbyStore.emit('DISPOSE');
+    });
+  };
+
+  send = (event: Event) => {
+    const lobbyCode = event.lobbyCode;
+    const lobbyStore = this.lobbyStores.get(lobbyCode);
+    invariant(lobbyStore);
+    lobbyStore.send(event);
   };
 
   private static usedLobbyCodes = new Set<LobbyCode>();
@@ -45,31 +64,31 @@ export class CrypticStore {
         { length: 4 },
         () => chars[Math.floor(Math.random() * chars.length)],
       ).join('');
-    } while (CrypticStore.usedLobbyCodes.has(code));
-    CrypticStore.usedLobbyCodes.add(code);
+    } while (CrvpticStore.usedLobbyCodes.has(code));
+    CrvpticStore.usedLobbyCodes.add(code);
     return code;
   };
 }
 
-class LobbyStore {
-  private emitter = new EventEmitter<
-    { [TEventType in EventType]: Event } & {
-      TICK: (lobby: Lobby) => void;
-    }
-  >();
+class LobbyStore extends EventEmitter<{
+  TICK: (lobby: Lobby) => void;
+  DISPOSE: () => void;
+}> {
+  private internalEmitter = new EventEmitter<{
+    [TEventType in EventType]: Event;
+  }>();
   private lobby: Lobby;
-  private task: Task;
-  private timer: NodeJS.Timer;
 
   constructor(leaderName: string) {
+    super();
     this.lobby = createLobby(leaderName);
 
     const channel = stdChannel();
     Object.values(EventType).forEach(event => {
-      this.emitter.on(event, channel.put);
+      this.internalEmitter.on(event, channel.put);
     });
 
-    this.task = runSaga(
+    const task = runSaga(
       {
         channel,
         dispatch: (setState: (lobby: Lobby) => Lobby) => {
@@ -83,7 +102,7 @@ class LobbyStore {
     );
 
     const tick = () => {
-      this.emitter.emit('TICK', {
+      this.emit('TICK', {
         leader: this.lobby.leader,
         // don't send empty teams
         teams: this.lobby.teams.filter(({ players }) => players.length),
@@ -105,22 +124,29 @@ class LobbyStore {
     };
 
     tick();
-    this.timer = setInterval(tick, 1000 / TICK_RATE_HZ);
+    const timer = setInterval(tick, 1000 / TICK_RATE_HZ);
+
+    const reaperTimer = setInterval(() => {
+      const isEmpty = this.lobby.teams.every(team => team.players.length === 0);
+      if (isEmpty) {
+        this.emit('DISPOSE');
+      }
+    }, 1000 * 60);
+
+    this.once('DISPOSE', () => {
+      task.cancel();
+      channel.close();
+      clearInterval(timer);
+      clearInterval(reaperTimer);
+      setTimeout(() => {
+        this.internalEmitter.removeAllListeners();
+        this.removeAllListeners();
+      });
+    });
   }
 
   send = (event: Event) => {
-    this.emitter.emit(event.type, event);
-  };
-
-  onTick = (subscriber: (lobby: Lobby) => void) => {
-    this.emitter.on('TICK', subscriber);
-    return () => this.emitter.off('TICK', subscriber);
-  };
-
-  dispose = () => {
-    this.task.cancel();
-    clearInterval(this.timer);
-    this.emitter.removeAllListeners();
+    this.internalEmitter.emit(event.type, event);
   };
 
   hasPlayer = (playerName: string) => {

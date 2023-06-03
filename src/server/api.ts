@@ -1,6 +1,7 @@
 import Express, { ErrorRequestHandler, RequestHandler } from 'express';
 import cors from 'cors';
 import multer from 'multer';
+import invariant from 'ts-invariant';
 import {
   API_PORT,
   Route,
@@ -8,16 +9,16 @@ import {
   type Lobby,
   type Color,
   type CategoriesResponse,
-  type GameConfig,
   type DecodeMethod,
   objectKeys,
   DEFAULT_SECRET_CATEGORIES,
+  EventType,
+  Events,
 } from '../common';
-import { CrypticStore } from './store';
-import { Events } from './events';
+import { CrvpticStore } from './store';
 import { SECRET_BANK } from './game';
 
-const store = new CrypticStore();
+const store = new CrvpticStore();
 const app = Express();
 
 app.use(cors({ origin: true }));
@@ -57,13 +58,12 @@ app.post(Route.LobbyCreate, (req, res) => {
 
 app.get(Route.Lobby, (req, res) => {
   const { lobbyCode } = req.params;
+  invariant(lobbyCode);
   const { playerName } = req.query;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
+  invariant(typeof playerName === 'string');
 
-  if (lobby == null || typeof playerName !== 'string') {
-    res.end();
-    return;
-  }
+  store.send(Events.JoinLobby({ lobbyCode, playerName }));
+  const lobby = store.getLobby(lobbyCode, playerName);
 
   res.set({
     Connection: 'keep-alive',
@@ -74,199 +74,141 @@ app.get(Route.Lobby, (req, res) => {
 
   res.flushHeaders();
 
-  lobby.send(Events.JoinLobby({ playerName }));
-
-  const handler = (lobby: Lobby) => {
+  const handleTick = (lobby: Lobby) => {
     res.write('event: message\n');
     res.write(`data: ${JSON.stringify(lobby)}\n\n`);
   };
 
-  const unsubscribe = lobby.onTick(handler);
+  lobby.addListener('TICK', handleTick);
+  lobby.once('DISPOSE', res.end);
 
   res.socket?.on('end', () => {
-    unsubscribe();
+    lobby.removeListener('TICK', handleTick);
+    lobby.removeListener('DISPOSE', res.end);
   });
 });
 
-app.put(Route.LobbyLeave, auth, (req, res) => {
-  const { lobbyCode } = req.params;
-  const { playerName } = req.body;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
-  if (lobby == null || !Boolean(playerName)) {
-    res.end();
-    return;
+app.put(Route.LobbyEvent, auth, (req, res) => {
+  const { type, lobbyCode, playerName, ...formData } = req.body;
+  switch (type as EventType) {
+    case EventType.StartGame:
+      store.send(
+        Events.StartGame({
+          lobbyCode,
+          playerName,
+          ...(formData.teamColor && {
+            teamColor: Number(formData.teamColor) as Color,
+          }),
+          ...(formData.encodeTimeLimit && {
+            encodeTimeLimit: Number(formData.encodeTimeLimit),
+          }),
+          ...(formData.decodeTimeLimit && {
+            decodeTimeLimit: Number(formData.decodeTimeLimit),
+          }),
+          ...(formData.secretCount && {
+            secretCount: Number(formData.secretCount),
+          }),
+          ...(formData.virusCount && {
+            virusCount: Number(formData.virusCount),
+          }),
+          ...(formData.decodeMethod && {
+            decodeMethod: Number(formData.decodeMethod) as DecodeMethod,
+          }),
+          ...(formData.allowExtraDecode && {
+            virusCount: formData.allowExtraDecode === 'on',
+          }),
+          ...(formData.categories && { categories: formData.categories }),
+        }),
+      );
+      break;
+    case EventType.JoinTeam:
+      store.send(
+        Events.JoinTeam({
+          lobbyCode,
+          playerName,
+          ...(formData.teamColor && {
+            teamColor: Number(formData.teamColor) as Color,
+          }),
+        }),
+      );
+      break;
+    case EventType.JoinLobby:
+      store.send(
+        Events.JoinLobby({
+          lobbyCode,
+          playerName,
+        }),
+      );
+      break;
+    case EventType.LeaveLobby:
+      store.send(
+        Events.LeaveLobby({
+          lobbyCode,
+          playerName,
+        }),
+      );
+      break;
+    case EventType.DisbandLobby:
+      store.send(
+        Events.DisbandLobby({
+          lobbyCode,
+          playerName,
+        }),
+      );
+      break;
+    case EventType.DemoteEncoder:
+      store.send(
+        Events.DemoteEncoder({
+          lobbyCode,
+          playerName,
+        }),
+      );
+      break;
+    case EventType.PromoteEncoder:
+      store.send(
+        Events.PromoteEncoder({
+          lobbyCode,
+          playerName,
+        }),
+      );
+      break;
+    case EventType.EncodeSecret:
+      store.send(
+        Events.EncodeSecret({
+          lobbyCode,
+          playerName,
+          signal: formData.signal,
+          secretCount: Number(formData.secretCount),
+        }),
+      );
+      break;
+    case EventType.DecodeSecret:
+      store.send(
+        Events.DecodeSecret({
+          lobbyCode,
+          playerName,
+          secret: formData.secret,
+        }),
+      );
+      break;
+    case EventType.CancelDecodeSecret:
+      store.send(
+        Events.CancelDecodeSecret({
+          lobbyCode,
+          playerName,
+          secret: formData.secret,
+        }),
+      );
+      break;
+    case EventType.SkipDecoding:
+      store.send(
+        Events.SkipDecoding({
+          lobbyCode,
+          playerName,
+        }),
+      );
+      break;
   }
-  lobby.send(Events.LeaveLobby({ playerName }));
-  res.end();
-});
-
-app.put(Route.LobbyTeamJoin, auth, (req, res) => {
-  const { lobbyCode, teamColor } = req.params;
-  const { playerName } = req.body;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
-  if (lobby == null || !Boolean(teamColor) || !Boolean(playerName)) {
-    res.end();
-    return;
-  }
-  lobby.send(
-    Events.JoinTeam({
-      playerName,
-      teamColor: Number(teamColor) as Color,
-    }),
-  );
-  res.end();
-});
-
-app.put(Route.LobbyTeamEncoderDemote, auth, (req, res) => {
-  const { lobbyCode } = req.params;
-  const { playerName } = req.body;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
-  if (lobby == null || !Boolean(playerName)) {
-    res.end();
-    return;
-  }
-  lobby.send(
-    Events.DemoteEncoder({
-      playerName,
-    }),
-  );
-  res.end();
-});
-
-app.put(Route.LobbyTeamEncoderPromote, auth, (req, res) => {
-  const { lobbyCode } = req.params;
-  const { playerName } = req.body;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
-  if (lobby == null || !Boolean(playerName)) {
-    res.end();
-    return;
-  }
-  lobby.send(
-    Events.PromoteEncoder({
-      playerName,
-    }),
-  );
-  res.end();
-});
-
-app.post(Route.GameStart, auth, (req, res) => {
-  const { lobbyCode } = req.params;
-  const { playerName } = req.body;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
-  if (lobby == null || !Boolean(playerName)) {
-    res.end();
-    return;
-  }
-  const config: Partial<GameConfig> = {
-    ...(req.body.encodeTimeLimit
-      ? { encodeTimeLimit: Number(req.body.encodeTimeLimit) }
-      : {}),
-    ...(req.body.decodeTimeLimit
-      ? { decodeTimeLimit: Number(req.body.decodeTimeLimit) }
-      : {}),
-    ...(req.body.secretCount
-      ? { secretCount: Number(req.body.secretCount) }
-      : {}),
-    ...(req.body.virusCount ? { virusCount: Number(req.body.virusCount) } : {}),
-    ...(req.body.decodeMethod
-      ? { decodeMethod: Number(req.body.decodeMethod) as DecodeMethod }
-      : {}),
-    ...(req.body.allowExtraDecode
-      ? { virusCount: req.body.allowExtraDecode === 'on' }
-      : {}),
-    ...(req.body.categories && { categories: req.body.categories }),
-  };
-  // TODO: make sure only encoder does this in saga
-  lobby.send(Events.StartGame({ config }));
-  res.end();
-});
-
-app.put(Route.GameSecretEncode, auth, (req, res) => {
-  const { lobbyCode } = req.params;
-  const { playerName, signal, secretCount } = req.body;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
-  if (
-    lobby == null ||
-    !Boolean(playerName) ||
-    !Boolean(signal) ||
-    !Boolean(secretCount)
-  ) {
-    res.end();
-    return;
-  }
-  lobby.send(
-    Events.EncodeSecret({
-      playerName,
-      signal,
-      secretCount: Number(secretCount),
-    }),
-  );
-  res.end();
-});
-
-app.put(Route.GameSecretDecode, auth, (req, res) => {
-  const { lobbyCode } = req.params;
-  const { playerName, secret } = req.body;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
-  if (lobby == null || !Boolean(playerName) || !Boolean(secret)) {
-    res.end();
-    return;
-  }
-  lobby.send(
-    Events.DecodeSecret({
-      playerName,
-      secret,
-    }),
-  );
-  res.end();
-});
-
-app.put(Route.GameSecretDecodeCancel, auth, (req, res) => {
-  const { lobbyCode } = req.params;
-  const { playerName, secret } = req.body;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
-  if (lobby == null || !Boolean(playerName) || !Boolean(secret)) {
-    res.end();
-    return;
-  }
-  lobby.send(
-    Events.CancelDecodeSecret({
-      playerName,
-      secret,
-    }),
-  );
-  res.end();
-});
-
-app.put(Route.GameSecretDecodeSkip, auth, (req, res) => {
-  const { lobbyCode } = req.params;
-  const { playerName } = req.body;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
-  if (lobby == null || !Boolean(playerName)) {
-    res.end();
-    return;
-  }
-  lobby.send(
-    Events.SkipDecoding({
-      playerName,
-    }),
-  );
-  res.end();
-});
-
-app.delete(Route.LobbyDisband, auth, (req, res) => {
-  const { lobbyCode } = req.params;
-  const { playerName } = req.body;
-  const lobby = lobbyCode == null ? null : store.getLobby(lobbyCode);
-  if (lobby == null || !Boolean(playerName)) {
-    res.end();
-    return;
-  }
-  lobby.send(
-    Events.DisbandLobby({
-      playerName,
-    }),
-  );
   res.end();
 });
 

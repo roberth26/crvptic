@@ -1,40 +1,31 @@
 import React, { memo, useEffect, useReducer } from 'react';
-import { generatePath, useFetcher } from 'react-router-dom';
 import invariant from 'ts-invariant';
 import {
   type Game,
   type Secret,
   SecretType,
-  Route,
   colorValue,
   colorName,
+  EventType,
 } from '../../common';
 import {
   useLobby,
-  useLobbyCode,
   usePlayerName,
   usePlayerTeam,
 } from '../components/LobbyLayout';
+import * as EventForm from '../components/EventForm';
 
 export function Game() {
-  const fetcher = useFetcher();
-  const playerName = usePlayerName();
   const { activeGame } = useLobby();
   invariant(activeGame, 'activeGame nullish');
 
   return (
     <div className="Game">
-      <fetcher.Form className="Game_secrets" method="put">
-        <input
-          hidden={true}
-          name="playerName"
-          value={playerName}
-          readOnly={true}
-        />
+      <div className="Game_secrets">
         {activeGame.secrets.map(secret => (
           <Secret key={secret.value} secret={secret} />
         ))}
-      </fetcher.Form>
+      </div>
       <Encoder />
     </div>
   );
@@ -56,7 +47,7 @@ const TimeLeft = memo(({ endTime }: { endTime: number }) => {
 });
 
 const Secret = memo(({ secret }: { secret: Secret }) => {
-  const lobbyCode = useLobbyCode();
+  const eventFetcher = EventForm.useEventFetcher();
   const playerName = usePlayerName();
   const playerTeam = usePlayerTeam();
   const isEncoder = playerName === playerTeam.players[0];
@@ -68,45 +59,47 @@ const Secret = memo(({ secret }: { secret: Secret }) => {
   const playerCount = isDecoded ? null : secret.decodeAttempt?.players.length;
   const isVirus = secret.type === SecretType.Virus;
   const isNull = secret.type === SecretType.Null;
-  const formAction = isDecoded
-    ? undefined
-    : isDecoding
-    ? generatePath(Route.GameSecretDecodeCancel, { lobbyCode })
-    : generatePath(Route.GameSecretDecode, { lobbyCode });
 
   return (
-    <button
-      formAction={formAction}
-      className={[
-        'Secret',
-        isDecoded && 'decoded',
-        isVirus && 'virus',
-        isNull && 'null',
-        isEncoder && 'encoder',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      name="secret"
-      value={secret.value}
-      style={{
-        // @ts-ignore
-        '--secret-team-color':
-          secretColor == null ? undefined : colorValue(secretColor),
-      }}
-      disabled={isEncoder || Boolean(isDecoded)}
-    >
-      <span>{secret.value}</span>
-      <span>
-        {isVirus && (isEncoder || isDecoded) && <>⚠️</>}
-        {Boolean(playerCount) && <>&nbsp;{playerCount}</>}
-      </span>
-    </button>
+    <eventFetcher.Form>
+      {isDecoding && (
+        <EventForm.Event
+          type={EventType.CancelDecodeSecret}
+          secret={secret.value}
+        />
+      )}
+      {!isDecoding && (
+        <EventForm.Event type={EventType.DecodeSecret} secret={secret.value} />
+      )}
+      <button
+        className={[
+          'Secret',
+          isDecoded && 'decoded',
+          isVirus && 'virus',
+          isNull && 'null',
+          isEncoder && 'encoder',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        style={{
+          // @ts-ignore
+          '--secret-team-color':
+            secretColor == null ? undefined : colorValue(secretColor),
+        }}
+        disabled={isEncoder || Boolean(isDecoded)}
+      >
+        <span>{secret.value}</span>
+        <span>
+          {isVirus && (isEncoder || isDecoded) && <>⚠️</>}
+          {Boolean(playerCount) && <>&nbsp;{playerCount}</>}
+        </span>
+      </button>
+    </eventFetcher.Form>
   );
 });
 
 const Encoder = memo(() => {
-  const fetcher = useFetcher();
-  const lobbyCode = useLobbyCode();
+  const eventFetcher = EventForm.useEventFetcher();
   const playerName = usePlayerName();
   const { activeGame } = useLobby();
   invariant(activeGame, 'activeGame nullish');
@@ -116,6 +109,8 @@ const Encoder = memo(() => {
   const isPlayerTeamEncoder = playerName === playerTeam.players[0];
   const isPlayerEncoding = isPlayerTeamActive && isPlayerTeamEncoder;
   const hasEncoded = Boolean(activeGame.signal);
+  const canEncode = !hasEncoded && isPlayerEncoding;
+  const canSkip = hasEncoded && !isPlayerTeamEncoder && isPlayerTeamActive;
 
   return (
     <div className="Game_controls">
@@ -155,13 +150,7 @@ const Encoder = memo(() => {
           )}
         </div>
       </div>
-      <fetcher.Form className="Encoder">
-        <input
-          hidden={true}
-          name="playerName"
-          value={playerName}
-          readOnly={true}
-        />
+      <eventFetcher.Form className="Encoder">
         <label className="form-group">
           Encoded signal:
           <input
@@ -192,25 +181,25 @@ const Encoder = memo(() => {
             readOnly={!isPlayerEncoding}
           />
         </label>
-        {!hasEncoded && isPlayerEncoding && (
+        {canEncode && (
           <button
             className="bordered"
-            formMethod="put"
-            formAction={generatePath(Route.GameSecretEncode, { lobbyCode })}
+            name="type"
+            value={EventType.EncodeSecret}
           >
             Encode
           </button>
         )}
-        {hasEncoded && !isPlayerTeamEncoder && isPlayerTeamActive && (
+        {canSkip && (
           <button
             className="bordered"
-            formMethod="put"
-            formAction={generatePath(Route.GameSecretDecodeSkip, { lobbyCode })}
+            name="type"
+            value={EventType.SkipDecoding}
           >
             Skip
           </button>
         )}
-      </fetcher.Form>
+      </eventFetcher.Form>
     </div>
   );
 });

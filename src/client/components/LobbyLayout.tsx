@@ -1,32 +1,30 @@
 import React, {
+  ComponentRef,
   createContext,
-  ReactNode,
   RefObject,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Form,
-  generatePath,
   Outlet,
   useLoaderData,
   useOutletContext,
   useParams,
-  useSubmit,
 } from 'react-router-dom';
 import invariant from 'ts-invariant';
 import {
   type Maybe,
   type Lobby,
   getWinningTeam,
-  colorName,
-  colorValue,
-  Route,
+  EventType,
 } from '../../common';
 import { Game } from '../screens/Game';
+import * as EventForm from './EventForm';
+import { ConfirmationModal } from './ConfirmationModal';
 
 interface State {
   lobby: Maybe<Lobby>;
@@ -78,16 +76,19 @@ export function useLeaderTeam() {
 
 export function LobbyProvider() {
   const eventSource = useLoaderData() as EventSource;
-  const submit = useSubmit();
+  const eventSourceURL = eventSource.url;
   const { lobbyCode } = useParams();
   invariant(lobbyCode, 'lobbyCode nullish');
   const headerRef = useOutletContext<RefObject<HTMLDivElement>>();
   const [lobby, setLobby] = useState<State['lobby']>(null);
-  const [playerName] = useState<State['playerName']>(() => {
-    return new URL(eventSource.url).searchParams.get('playerName');
-  });
+  const playerName = useMemo(() => {
+    return new URL(eventSourceURL).searchParams.get('playerName');
+  }, [eventSourceURL]);
   invariant(playerName, 'playerName empty or nullish');
-  const isLeader = lobby?.leader === playerName;
+  const confirmationModalRef = useRef<ComponentRef<
+    typeof ConfirmationModal
+  > | null>(null);
+  const winningTeamColor = lobby == null ? null : getWinningTeam(lobby)?.color;
 
   useEffect(() => {
     const handleMessage = ({ data: newLobbyStr }: MessageEvent) => {
@@ -114,62 +115,40 @@ export function LobbyProvider() {
   );
 
   useEffect(() => {
-    const winningTeam = lobby == null ? null : getWinningTeam(lobby);
-    if (winningTeam == null) {
-      return;
+    if (winningTeamColor != null) {
+      confirmationModalRef.current?.open();
     }
-    setTimeout(() => {
-      const keepPlaying = confirm(
-        `${colorName(winningTeam.color)} team wins!\nKeep playing?`,
-      );
-      if (!keepPlaying) {
-        const formData = new FormData();
-        submit(formData, {
-          action: generatePath(Route.LobbyLeave, { lobbyCode }),
-          method: 'put',
-        });
-      }
-    }, 2000);
-  }, [lobby]);
+  }, [winningTeamColor]);
 
   return (
     <LobbyContext.Provider value={context}>
       {headerRef.current &&
         lobby?.activeGame &&
-        createPortal(
-          <Form>
-            <input
-              hidden={true}
-              name="playerName"
-              value={playerName}
-              readOnly={true}
-            />
-            {isLeader && (
-              <button
-                className="bordered"
-                formAction={generatePath(Route.LobbyDisband, { lobbyCode })}
-                formMethod="delete"
-              >
-                Disband
-              </button>
-            )}
-            <button
-              className="bordered"
-              formAction={generatePath(Route.LobbyLeave, { lobbyCode })}
-              formMethod="put"
-            >
-              Leave
-            </button>
-          </Form>,
-          headerRef.current,
-        )}
-      {lobby == null ? (
-        <div className="loading">Connecting...</div>
-      ) : lobby.activeGame ? (
-        <Game />
-      ) : (
-        <Outlet />
-      )}
+        createPortal(<HeaderMenu />, headerRef.current)}
+      {!lobby && <div className="loading">Connecting...</div>}
+      {lobby && lobby.activeGame && <Game />}
+      {lobby && !lobby.activeGame && <Outlet />}
+      {lobby && <ConfirmationModal ref={confirmationModalRef} />}
     </LobbyContext.Provider>
+  );
+}
+
+function HeaderMenu() {
+  const eventFetcher = EventForm.useEventFetcher();
+  const playerName = usePlayerName();
+  const lobby = useLobby();
+  const isLeader = lobby.leader === playerName;
+
+  return (
+    <eventFetcher.Form>
+      {isLeader && (
+        <button className="bordered" name="type" value={EventType.DisbandLobby}>
+          Disband
+        </button>
+      )}
+      <button className="bordered" name="type" value={EventType.LeaveLobby}>
+        Leave
+      </button>
+    </eventFetcher.Form>
   );
 }

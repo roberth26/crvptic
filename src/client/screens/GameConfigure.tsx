@@ -1,17 +1,16 @@
 import React from 'react';
-import { Form, generatePath, Link, useLoaderData } from 'react-router-dom';
+import { Link, useLoaderData } from 'react-router-dom';
 import {
   DecodeMethod,
   defaultGameConfigWithoutCategories,
-  Route,
   TimeLimit,
   type CategoriesResponse,
+  EventType,
 } from '../../common';
-import { useLobbyCode, usePlayerName } from '../components/LobbyLayout';
+import * as EventForm from '../components/EventForm';
 
 export function GameConfigure() {
-  const lobbyCode = useLobbyCode();
-  const playerName = usePlayerName();
+  const eventFetcher = EventForm.useEventFetcher();
   const { categories: categoriesRaw } = useLoaderData() as CategoriesResponse;
   const categories = categoriesRaw.map(({ category }) => category);
   const defaultCategories = categoriesRaw.flatMap(({ category, isDefault }) =>
@@ -19,17 +18,7 @@ export function GameConfigure() {
   );
 
   return (
-    <Form
-      className="ConfigureGame"
-      method="post"
-      action={generatePath(Route.GameStart, { lobbyCode })}
-    >
-      <input
-        hidden={true}
-        name="playerName"
-        value={playerName}
-        readOnly={true}
-      />
+    <eventFetcher.Form className="ConfigureGame">
       <label className="form-group">
         Encode time limit
         <select
@@ -112,7 +101,9 @@ export function GameConfigure() {
       <Link role="button" className="bordered" to=".." replace={true}>
         Cancel
       </Link>
-      <button className="bordered">Start game</button>
-    </Form>
+      <button className="bordered" name="type" value={EventType.StartGame}>
+        Start game
+      </button>
+    </eventFetcher.Form>
   );
 }
