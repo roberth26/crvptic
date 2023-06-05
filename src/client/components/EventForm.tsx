@@ -7,7 +7,6 @@ import {
   objectKeys,
 } from '../../common';
 import { useLobbyCode, usePlayerName } from './LobbyLayout';
-import { HiddenField } from './HiddenField';
 
 export function LobbyCode() {
   return <HiddenField name="lobbyCode" value={useLobbyCode()} />;
@@ -53,4 +52,8 @@ export function Event(
       ))}
     </>
   );
+}
+
+function HiddenField({ name, value }: { name: string; value: string }) {
+  return <input hidden={true} name={name} value={value} readOnly={true} />;
 }

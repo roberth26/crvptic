@@ -2,7 +2,6 @@ const path = require('path');
 const { fileURLToPath } = require('url');
 const { DefinePlugin } = require('webpack');
 const nodeExternals = require('webpack-node-externals');
-const CopyPlugin = require('copy-webpack-plugin');
 
 const clientConfig = {
   mode: 'development',
@@ -34,18 +33,6 @@ const clientConfig = {
       },
     ],
   },
-  plugins: [
-    new DefinePlugin({
-      'process.env.PORT': JSON.stringify(process.env['PORT']),
-    }),
-    new CopyPlugin({
-      patterns: [
-        {
-          from: './src/static',
-        },
-      ],
-    }),
-  ],
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],
   },

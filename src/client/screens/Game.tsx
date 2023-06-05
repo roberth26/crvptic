@@ -1,4 +1,10 @@
-import React, { memo, useEffect, useReducer } from 'react';
+import React, {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+} from 'react';
 import invariant from 'ts-invariant';
 import {
   type Game,
@@ -48,12 +54,20 @@ const TimeLeft = memo(({ endTime }: { endTime: number }) => {
 
 const Secret = memo(({ secret }: { secret: Secret }) => {
   const eventFetcher = EventForm.useEventFetcher();
+  const { activeGame } = useLobby();
+  invariant(activeGame, 'activeGame nullish');
   const playerName = usePlayerName();
   const playerTeam = usePlayerTeam();
+  const isPlayerTeamActive = playerTeam.color === activeGame.activeTeam;
   const isEncoder = playerName === playerTeam.players[0];
+  const hasEncoded = activeGame.signal != null;
   const isDecoded = secret.decodeTeamColor != null;
   const isDecoding =
     secret.decodeAttempt?.players.includes(playerName) ?? false;
+  const canDecode =
+    isPlayerTeamActive && hasEncoded && !isEncoder && !isDecoded && !isDecoding;
+  const canCancelDecode =
+    isPlayerTeamActive && hasEncoded && !isEncoder && !isDecoded && isDecoding;
   const secretColor =
     secret.type === SecretType.Secret ? secret.teamColor : null;
   const playerCount = isDecoded ? null : secret.decodeAttempt?.players.length;
@@ -62,14 +76,14 @@ const Secret = memo(({ secret }: { secret: Secret }) => {
 
   return (
     <eventFetcher.Form>
-      {isDecoding && (
+      {canDecode && (
+        <EventForm.Event type={EventType.DecodeSecret} secret={secret.value} />
+      )}
+      {canCancelDecode && (
         <EventForm.Event
           type={EventType.CancelDecodeSecret}
           secret={secret.value}
         />
-      )}
-      {!isDecoding && (
-        <EventForm.Event type={EventType.DecodeSecret} secret={secret.value} />
       )}
       <button
         className={[
@@ -86,7 +100,7 @@ const Secret = memo(({ secret }: { secret: Secret }) => {
           '--secret-team-color':
             secretColor == null ? undefined : colorValue(secretColor),
         }}
-        disabled={isEncoder || Boolean(isDecoded)}
+        disabled={!canDecode && !canCancelDecode}
       >
         <span>{secret.value}</span>
         <span>
@@ -104,6 +118,7 @@ const Encoder = memo(() => {
   const { activeGame } = useLobby();
   invariant(activeGame, 'activeGame nullish');
   const playerTeam = usePlayerTeam();
+  const signalInputRef = useRef<HTMLInputElement | null>(null);
   const activeTeamColor = activeGame.activeTeam;
   const isPlayerTeamActive = playerTeam.color === activeTeamColor;
   const isPlayerTeamEncoder = playerName === playerTeam.players[0];
@@ -111,6 +126,13 @@ const Encoder = memo(() => {
   const hasEncoded = Boolean(activeGame.signal);
   const canEncode = !hasEncoded && isPlayerEncoding;
   const canSkip = hasEncoded && !isPlayerTeamEncoder && isPlayerTeamActive;
+
+  useLayoutEffect(() => {
+    const input = signalInputRef.current;
+    if (input && activeGame.signal == null) {
+      input.value = '';
+    }
+  }, [activeGame.signal]);
 
   return (
     <div className="Game_controls">
@@ -154,14 +176,15 @@ const Encoder = memo(() => {
         <label className="form-group">
           Encoded signal:
           <input
+            ref={signalInputRef}
             name="signal"
             type="text"
             placeholder="signal"
-            value={isPlayerEncoding ? undefined : activeGame.signal ?? '--'}
+            defaultValue={activeGame.signal ?? undefined}
             pattern="[^\s]+"
             required={true}
-            disabled={!isPlayerEncoding || hasEncoded}
-            readOnly={!isPlayerEncoding}
+            disabled={!canEncode}
+            readOnly={!canEncode}
           />
         </label>
         <label className="form-group">
@@ -169,16 +192,13 @@ const Encoder = memo(() => {
           <input
             name="secretCount"
             type="number"
-            defaultValue={isPlayerEncoding ? 2 : undefined}
-            value={
-              isPlayerEncoding ? undefined : activeGame.secretCount ?? '--'
-            }
+            defaultValue={activeGame.secretCount ?? 2}
             min={0}
             max={16}
             step={1}
             required={true}
-            disabled={!isPlayerEncoding || hasEncoded}
-            readOnly={!isPlayerEncoding}
+            disabled={!canEncode}
+            readOnly={!canEncode}
           />
         </label>
         {canEncode && (

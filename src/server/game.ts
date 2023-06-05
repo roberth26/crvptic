@@ -8,6 +8,7 @@ import {
   delay,
   race,
   call,
+  fork,
 } from 'redux-saga/effects';
 import invariant from 'ts-invariant';
 import shuffleArray from 'shuffle-array';
@@ -30,6 +31,8 @@ import Misc from '../../data/Misc.json';
 import Sports from '../../data/Sports.json';
 import Adult from '../../data/Adult.json';
 
+const LOBBY_REAP_TIME = 1000 * 60 * 5;
+
 const put = putRaw as (setState: (lobby: Lobby) => Lobby) => void;
 
 export const SECRET_BANK = {
@@ -42,104 +45,131 @@ export const SECRET_BANK = {
 
 // @ts-ignore
 export function* root() {
-  // TODO: implement disband
   yield takeEvery(
     EventType.LeaveLobby,
     function* (leaveLobbyEvent: Event<'LeaveLobby'>) {
       yield put(leaveLobby(leaveLobbyEvent));
     },
   );
-  while (true) {
-    // @ts-ignore
-    const preGameTask = yield all([
-      takeEvery(
-        EventType.JoinLobby,
-        function* (joinLobbyEvent: Event<'JoinLobby'>) {
-          yield put(joinLobby(joinLobbyEvent));
-        },
-      ),
-      takeEvery(
-        EventType.JoinTeam,
-        function* (joinTeamEvent: Event<'JoinTeam'>) {
-          yield put(joinTeam(joinTeamEvent));
-        },
-      ),
-      takeEvery(
-        EventType.DemoteEncoder,
-        function* (demoteEncoderEvent: Event<'DemoteEncoder'>) {
-          yield put(demoteEncoder(demoteEncoderEvent));
-        },
-      ),
-      takeEvery(
-        EventType.PromoteEncoder,
-        function* (promoteEncoderEvent: Event<'PromoteEncoder'>) {
-          yield put(promoteEncoder(promoteEncoderEvent));
-        },
-      ),
-    ]);
-    const startGameEvent: Event<'StartGame'> = yield take(EventType.StartGame);
-    yield put(startGame(startGameEvent));
-    yield cancel(preGameTask);
-    const encodeTimeLimitMs: ReturnType<typeof getEncodeTimeLimitMs> =
-      yield select(getEncodeTimeLimitMs);
-    const decodeTimeLimitMs: ReturnType<typeof getDecodeTimeLimitMs> =
-      yield select(getDecodeTimeLimitMs);
-    // loop teams
-    while ((yield select(isGameRunning)) as ReturnType<typeof isGameRunning>) {
-      const activeTeamColor: ReturnType<typeof getActiveTeamColor> =
-        yield select(getActiveTeamColor);
-      const [encodeSecretEvent]: [Maybe<Event<'EncodeSecret'>>] = yield race([
-        take(EventType.EncodeSecret),
-        delay(encodeTimeLimitMs),
-      ]);
-      if (!encodeSecretEvent) {
-        yield put(endTurn());
-        continue;
+  yield race([
+    take(EventType.DisbandLobby),
+    call(reaper),
+    call(function* () {
+      while (true) {
+        // @ts-ignore
+        const preGameTask = yield all([
+          takeEvery(
+            EventType.JoinLobby,
+            function* (joinLobbyEvent: Event<'JoinLobby'>) {
+              yield put(joinLobby(joinLobbyEvent));
+            },
+          ),
+          takeEvery(
+            EventType.JoinTeam,
+            function* (joinTeamEvent: Event<'JoinTeam'>) {
+              yield put(joinTeam(joinTeamEvent));
+            },
+          ),
+          takeEvery(
+            EventType.DemoteEncoder,
+            function* (demoteEncoderEvent: Event<'DemoteEncoder'>) {
+              yield put(demoteEncoder(demoteEncoderEvent));
+            },
+          ),
+          takeEvery(
+            EventType.PromoteEncoder,
+            function* (promoteEncoderEvent: Event<'PromoteEncoder'>) {
+              yield put(promoteEncoder(promoteEncoderEvent));
+            },
+          ),
+        ]);
+        const startGameEvent: Event<'StartGame'> = yield take(
+          EventType.StartGame,
+        );
+        yield cancel(preGameTask);
+        yield call(game, startGameEvent);
       }
-      yield put(encodeSecret(encodeSecretEvent));
-      // @ts-ignore
-      const turnTasks = yield all([
-        takeEvery(
-          EventType.SkipDecoding,
-          function* (skipDecodingEvent: Event<'SkipDecoding'>) {
-            yield put(skipDecoding(skipDecodingEvent));
-          },
-        ),
-        takeEvery(
-          EventType.DecodeSecret,
-          function* (decodeSecretEvent: Event<'DecodeSecret'>) {
-            yield put(decodeSecret(decodeSecretEvent));
-          },
-        ),
-        takeEvery(
-          EventType.CancelDecodeSecret,
-          function* (cancelDecodeSecretEvent: Event<'CancelDecodeSecret'>) {
-            yield put(cancelDecodeSecret(cancelDecodeSecretEvent));
-          },
-        ),
-      ]);
-      yield race([
-        delay(decodeTimeLimitMs),
-        takeChange(isTeamActive, activeTeamColor),
-      ]);
-      yield cancel(turnTasks);
-    }
-    yield delay(2000);
-    yield put(endGame());
-  }
+    }),
+  ]);
 }
 
-function takeChange(...args: Parameters<typeof select>) {
-  return call(function* () {
-    const prev = yield select(...args);
-    while (true) {
-      const curr: ReturnType<(typeof args)[0]> = yield select(...args);
-      if (curr !== prev) {
-        return curr;
-      }
-      yield take('*');
+function* game(startGameEvent: Event<'StartGame'>) {
+  yield put(startGame(startGameEvent));
+  while (true) {
+    const isRunning: ReturnType<typeof isGameRunning> = yield select(
+      isGameRunning,
+    );
+    if (!isRunning) {
+      break;
     }
-  });
+    const activeTeamColor: ReturnType<typeof getActiveTeamColor> = yield select(
+      getActiveTeamColor,
+    );
+    yield call(turn, activeTeamColor);
+  }
+  yield delay(2000);
+  yield put(endGame());
+}
+
+function* turn(teamColor: Color) {
+  const encodeTimeLimitMs: ReturnType<typeof getEncodeTimeLimitMs> =
+    yield select(getEncodeTimeLimitMs);
+  const decodeTimeLimitMs: ReturnType<typeof getDecodeTimeLimitMs> =
+    yield select(getDecodeTimeLimitMs);
+  const [encodeSecretEvent]: [Maybe<Event<'EncodeSecret'>>] = yield race([
+    take(EventType.EncodeSecret),
+    delay(encodeTimeLimitMs),
+  ]);
+  if (!encodeSecretEvent) {
+    yield put(endTurn());
+    return;
+  }
+  yield put(encodeSecret(encodeSecretEvent));
+  yield race([
+    delay(decodeTimeLimitMs),
+    call(function* () {
+      while (true) {
+        const active: ReturnType<typeof isTeamActive> = yield select(
+          isTeamActive,
+          teamColor,
+        );
+        if (!active) {
+          return;
+        }
+        const event: Event<
+          'SkipDecoding' | 'DecodeSecret' | 'CancelDecodeSecret'
+        > = yield take([
+          EventType.SkipDecoding,
+          EventType.DecodeSecret,
+          EventType.CancelDecodeSecret,
+        ]);
+        yield put(
+          event.type === EventType.SkipDecoding
+            ? skipDecoding(event)
+            : event.type === EventType.DecodeSecret
+            ? decodeSecret(event)
+            : cancelDecodeSecret(event),
+        );
+      }
+    }),
+  ]);
+}
+
+// @ts-ignore
+function* reaper() {
+  while (true) {
+    const winner: 'REAP' | Event = yield race([
+      delay(LOBBY_REAP_TIME, 'REAP'),
+      take('*'),
+    ]);
+    if (winner !== 'REAP') {
+      continue;
+    }
+    const isEmpty: ReturnType<typeof isLobbyEmpty> = yield select(isLobbyEmpty);
+    if (!isEmpty) {
+      continue;
+    }
+  }
 }
 
 function getActiveTeamColor(lobby: Lobby) {
@@ -156,6 +186,10 @@ function isTeamActive(lobby: Lobby, teamColor: Color) {
 
 function isGameRunning(lobby: Lobby) {
   return !Boolean(getWinningTeam(lobby));
+}
+
+function isLobbyEmpty(lobby: Lobby) {
+  return lobby.teams.every(team => team.players.length === 0);
 }
 
 function getEncodeTimeLimitMs(lobby: Lobby) {
@@ -222,7 +256,7 @@ function leaveLobby({ playerName }: Event<'LeaveLobby'>) {
       const teamIndex = lobby.teams.indexOf(team);
       const nextTeam =
         lobby.teams[teamIndex + 1 >= lobby.teams.length ? 0 : teamIndex + 1];
-      invariant(nextTeam);
+      invariant(nextTeam, 'nextTeam nullish');
       game.activeTeam = nextTeam.color;
       game.encodeStartTime = Math.floor(Date.now() / 1000);
     }
@@ -281,7 +315,9 @@ function startGame({
       ...DEFAULT_GAME_CONFIG,
       ...config,
     };
-    const fullTeams = lobby.teams.filter(team => team.players.length >= 2);
+    const fullTeams = shuffleArray(
+      lobby.teams.filter(team => team.players.length >= 2),
+    );
     const totalTeamSecrets = gameConfig.secretCount * fullTeams.length + 1;
     const totalNulls = gameConfig.secretCount;
     const totalViruses = gameConfig.virusCount;
@@ -406,8 +442,6 @@ function decodeSecret({ playerName, secret }: Event<'DecodeSecret'>) {
     }
 
     delete gameSecret.decodeAttempt;
-    delete activeGame.signal;
-    delete activeGame.decodeStartTime;
     gameSecret.decodeTeamColor = team.color;
 
     const isTeamSecret =
@@ -432,6 +466,9 @@ function decodeSecret({ playerName, secret }: Event<'DecodeSecret'>) {
 
     // turn is over
 
+    delete activeGame.signal;
+    delete activeGame.secretCount;
+    delete activeGame.decodeStartTime;
     activeGame.encodeStartTime = Math.floor(Date.now() / 1000);
 
     if (isVirus) {
@@ -524,6 +561,10 @@ function skipDecoding({ playerName }: Event<'SkipDecoding'>) {
     if (game.activeTeam !== team.color) {
       return;
     }
+    delete game.signal;
+    delete game.secretCount;
+    delete game.decodeStartTime;
+    game.encodeStartTime = Math.floor(Date.now() / 1000);
     const nonEmptyTeams = lobby.teams.filter(team => team.players.length >= 2);
     const teamIndex = nonEmptyTeams.indexOf(team);
     const nextTeamIndex =

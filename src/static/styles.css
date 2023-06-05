@@ -206,7 +206,7 @@ hr {
 
 .ConfigureGame {
   display: grid;
-  grid-template-columns: repeat(2, minmax(auto, 360px));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: var(--unit-6);
   align-content: center;
   align-items: start;
@@ -232,6 +232,10 @@ hr {
   .ConfigureGame {
     align-content: baseline;
     grid-template-columns: 1fr;
+  }
+
+  .ConfigureGame_categories {
+    grid-column: unset;
   }
 
   .ConfigureGame_categories-list {

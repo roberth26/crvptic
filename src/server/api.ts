@@ -3,10 +3,8 @@ import cors from 'cors';
 import multer from 'multer';
 import invariant from 'ts-invariant';
 import {
-  API_PORT,
   Route,
   type LobbyCreateResponse,
-  type Lobby,
   type Color,
   type CategoriesResponse,
   type DecodeMethod,
@@ -14,15 +12,18 @@ import {
   DEFAULT_SECRET_CATEGORIES,
   EventType,
   Events,
+  APIRoute,
 } from '../common';
 import { CrvpticStore } from './store';
 import { SECRET_BANK } from './game';
+import { join } from 'path';
 
 const store = new CrvpticStore();
 const app = Express();
 
 app.use(cors({ origin: true }));
 app.use(multer().any());
+app.use('/static', Express.static(join(__dirname, '../static')));
 
 const auth: RequestHandler = (req, _res, next) => {
   const { lobbyCode } = req.params;
@@ -43,11 +44,11 @@ const categoriesResponse: CategoriesResponse = {
   }),
 };
 
-app.get(Route.Categories, (_req, res) => {
+app.get(APIRoute(Route.Categories), (_req, res) => {
   res.json(categoriesResponse);
 });
 
-app.post(Route.LobbyCreate, (req, res) => {
+app.post(APIRoute(Route.LobbyCreate), (req, res) => {
   const { playerName } = req.body;
   const lobbyCode = store.createLobby(playerName);
   const response: LobbyCreateResponse = {
@@ -56,14 +57,14 @@ app.post(Route.LobbyCreate, (req, res) => {
   res.json(response);
 });
 
-app.get(Route.Lobby, (req, res) => {
+app.get(APIRoute(Route.Lobby), (req, res) => {
   const { lobbyCode } = req.params;
   invariant(lobbyCode);
   const { playerName } = req.query;
   invariant(typeof playerName === 'string');
 
-  store.send(Events.JoinLobby({ lobbyCode, playerName }));
-  const lobby = store.getLobby(lobbyCode, playerName);
+  const lobby = store.getLobby(lobbyCode);
+  lobby.send(Events.JoinLobby({ lobbyCode, playerName }));
 
   res.set({
     Connection: 'keep-alive',
@@ -74,25 +75,24 @@ app.get(Route.Lobby, (req, res) => {
 
   res.flushHeaders();
 
-  const handleTick = (lobby: Lobby) => {
+  const unsubscribeTick = lobby.onTick(lobby => {
     res.write('event: message\n');
     res.write(`data: ${JSON.stringify(lobby)}\n\n`);
-  };
-
-  lobby.addListener('TICK', handleTick);
-  lobby.once('DISPOSE', res.end);
+  });
+  const unsubscribeDispose = lobby.onceDispose(() => res.end());
 
   res.socket?.on('end', () => {
-    lobby.removeListener('TICK', handleTick);
-    lobby.removeListener('DISPOSE', res.end);
+    unsubscribeTick();
+    unsubscribeDispose();
   });
 });
 
-app.put(Route.LobbyEvent, auth, (req, res) => {
+app.put(APIRoute(Route.LobbyEvent), auth, (req, res) => {
   const { type, lobbyCode, playerName, ...formData } = req.body;
+  const lobby = store.getLobby(lobbyCode, playerName);
   switch (type as EventType) {
     case EventType.StartGame:
-      store.send(
+      lobby.send(
         Events.StartGame({
           lobbyCode,
           playerName,
@@ -122,7 +122,7 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
       );
       break;
     case EventType.JoinTeam:
-      store.send(
+      lobby.send(
         Events.JoinTeam({
           lobbyCode,
           playerName,
@@ -133,7 +133,7 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
       );
       break;
     case EventType.JoinLobby:
-      store.send(
+      lobby.send(
         Events.JoinLobby({
           lobbyCode,
           playerName,
@@ -141,7 +141,7 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
       );
       break;
     case EventType.LeaveLobby:
-      store.send(
+      lobby.send(
         Events.LeaveLobby({
           lobbyCode,
           playerName,
@@ -149,7 +149,7 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
       );
       break;
     case EventType.DisbandLobby:
-      store.send(
+      lobby.send(
         Events.DisbandLobby({
           lobbyCode,
           playerName,
@@ -157,7 +157,7 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
       );
       break;
     case EventType.DemoteEncoder:
-      store.send(
+      lobby.send(
         Events.DemoteEncoder({
           lobbyCode,
           playerName,
@@ -165,7 +165,7 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
       );
       break;
     case EventType.PromoteEncoder:
-      store.send(
+      lobby.send(
         Events.PromoteEncoder({
           lobbyCode,
           playerName,
@@ -173,7 +173,7 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
       );
       break;
     case EventType.EncodeSecret:
-      store.send(
+      lobby.send(
         Events.EncodeSecret({
           lobbyCode,
           playerName,
@@ -183,7 +183,7 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
       );
       break;
     case EventType.DecodeSecret:
-      store.send(
+      lobby.send(
         Events.DecodeSecret({
           lobbyCode,
           playerName,
@@ -192,7 +192,7 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
       );
       break;
     case EventType.CancelDecodeSecret:
-      store.send(
+      lobby.send(
         Events.CancelDecodeSecret({
           lobbyCode,
           playerName,
@@ -201,7 +201,7 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
       );
       break;
     case EventType.SkipDecoding:
-      store.send(
+      lobby.send(
         Events.SkipDecoding({
           lobbyCode,
           playerName,
@@ -212,6 +212,10 @@ app.put(Route.LobbyEvent, auth, (req, res) => {
   res.end();
 });
 
+app.get('*', (_req, res) => {
+  res.sendFile(join(__dirname, '../static/index.html'));
+});
+
 const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   console.log(error);
   res.status(500).send('Error');
@@ -219,7 +223,7 @@ const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 
 app.use(errorHandler);
 
-const server = app.listen(API_PORT);
+const server = app.listen(process.env['PORT']);
 
 process.on('SIGTERM', () => {
   store.dispose();

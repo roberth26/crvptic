@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import {
   Outlet,
   useLoaderData,
+  useNavigate,
   useOutletContext,
   useParams,
 } from 'react-router-dom';
@@ -21,6 +22,7 @@ import {
   type Lobby,
   getWinningTeam,
   EventType,
+  Route,
 } from '../../common';
 import { Game } from '../screens/Game';
 import * as EventForm from './EventForm';
@@ -79,8 +81,15 @@ export function LobbyProvider() {
   const eventSourceURL = eventSource.url;
   const { lobbyCode } = useParams();
   invariant(lobbyCode, 'lobbyCode nullish');
+  const navigate = useNavigate();
   const headerRef = useOutletContext<RefObject<HTMLDivElement>>();
-  const [lobby, setLobby] = useState<State['lobby']>(null);
+  const [latestMessage, setLatestMessage] = useState<Maybe<string>>(null);
+  const lobby = useMemo(() => {
+    if (latestMessage == null) {
+      return null;
+    }
+    return JSON.parse(latestMessage) as Lobby;
+  }, [latestMessage]);
   const playerName = useMemo(() => {
     return new URL(eventSourceURL).searchParams.get('playerName');
   }, [eventSourceURL]);
@@ -90,21 +99,28 @@ export function LobbyProvider() {
   > | null>(null);
   const winningTeamColor = lobby == null ? null : getWinningTeam(lobby)?.color;
 
+  // TODO: close the connection
+  // But i guess I should establish it here...
+  // useEffect(() => {
+
+  //   return () => eventSource.close();
+  // }, [eventSource]);
+
   useEffect(() => {
-    const handleMessage = ({ data: newLobbyStr }: MessageEvent) => {
-      setLobby(prevLobby => {
-        const prevLobbyStr = JSON.stringify(prevLobby);
-        if (prevLobbyStr === newLobbyStr) {
-          return prevLobby;
-        }
-        return JSON.parse(newLobbyStr);
-      });
+    const handler = () => navigate(Route.Index);
+    eventSource.addEventListener('error', handler, { once: true });
+    return () => eventSource.removeEventListener('error', handler);
+  }, [eventSource]);
+
+  useEffect(() => {
+    const handleMessage = ({ data }: MessageEvent) => {
+      setLatestMessage(data);
     };
     eventSource.addEventListener('message', handleMessage);
     return () => {
       eventSource.removeEventListener('message', handleMessage);
     };
-  }, [eventSource, lobbyCode, playerName]);
+  }, [eventSource]);
 
   const context = useMemo<LobbyContext>(
     () => ({
