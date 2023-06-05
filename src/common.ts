@@ -176,6 +176,12 @@ export const Route = {
   GameSecretDecodeSkip: '/:lobbyCode/game/decode-skip',
 } as const;
 
+export function APIRoute<TRoute extends `/${string}`>(
+  route: TRoute,
+): `/api${TRoute}` {
+  return `/api${route}`;
+}
+
 export interface CategoriesResponse {
   categories: Array<{ category: string; isDefault?: 1 }>;
 }
@@ -189,8 +195,6 @@ export function objectKeys<TObject extends object>(
 ): Array<keyof TObject> {
   return Object.keys(object) as Array<keyof TObject>;
 }
-
-export const API_PORT = process.env['PORT'] as string;
 
 export function createLobby(leaderName: string): Lobby {
   return {

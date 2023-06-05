@@ -10,8 +10,9 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  generatePath,
   Outlet,
-  useLoaderData,
+  useNavigate,
   useOutletContext,
   useParams,
 } from 'react-router-dom';
@@ -21,10 +22,13 @@ import {
   type Lobby,
   getWinningTeam,
   EventType,
+  Route,
 } from '../../common';
 import { Game } from '../screens/Game';
 import * as EventForm from './EventForm';
 import { ConfirmationModal } from './ConfirmationModal';
+import { APIURL } from '../utils';
+import { readStateFromLocalStorage } from '../localStorage';
 
 interface State {
   lobby: Maybe<Lobby>;
@@ -75,15 +79,20 @@ export function useLeaderTeam() {
 }
 
 export function LobbyProvider() {
-  const eventSource = useLoaderData() as EventSource;
-  const eventSourceURL = eventSource.url;
   const { lobbyCode } = useParams();
   invariant(lobbyCode, 'lobbyCode nullish');
+  const navigate = useNavigate();
   const headerRef = useOutletContext<RefObject<HTMLDivElement>>();
-  const [lobby, setLobby] = useState<State['lobby']>(null);
-  const playerName = useMemo(() => {
-    return new URL(eventSourceURL).searchParams.get('playerName');
-  }, [eventSourceURL]);
+  const [latestMessage, setLatestMessage] = useState<Maybe<string>>(null);
+  const lobby = useMemo(() => {
+    if (latestMessage == null) {
+      return null;
+    }
+    return JSON.parse(latestMessage) as Lobby;
+  }, [latestMessage]);
+  const [playerName] = useState(() => {
+    return readStateFromLocalStorage()?.playerName;
+  });
   invariant(playerName, 'playerName empty or nullish');
   const confirmationModalRef = useRef<ComponentRef<
     typeof ConfirmationModal
@@ -91,20 +100,34 @@ export function LobbyProvider() {
   const winningTeamColor = lobby == null ? null : getWinningTeam(lobby)?.color;
 
   useEffect(() => {
-    const handleMessage = ({ data: newLobbyStr }: MessageEvent) => {
-      setLobby(prevLobby => {
-        const prevLobbyStr = JSON.stringify(prevLobby);
-        if (prevLobbyStr === newLobbyStr) {
-          return prevLobby;
-        }
-        return JSON.parse(newLobbyStr);
-      });
-    };
-    eventSource.addEventListener('message', handleMessage);
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+    const eventSource = new EventSource(
+      Object.assign(
+        APIURL(generatePath(Route.Lobby, { lobbyCode }), location.href),
+        {
+          search: String(new URLSearchParams({ playerName })),
+        },
+      ),
+    );
+    eventSource.addEventListener(
+      'message',
+      ({ data }: MessageEvent) => {
+        setLatestMessage(data);
+      },
+      {
+        signal,
+      },
+    );
+    eventSource.addEventListener('error', () => navigate(Route.Index), {
+      once: true,
+      signal,
+    });
     return () => {
-      eventSource.removeEventListener('message', handleMessage);
+      abortController.abort();
+      eventSource.close();
     };
-  }, [eventSource, lobbyCode, playerName]);
+  }, [lobbyCode, playerName, navigate]);
 
   const context = useMemo<LobbyContext>(
     () => ({

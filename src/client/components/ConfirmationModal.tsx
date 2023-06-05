@@ -40,7 +40,13 @@ export const ConfirmationModal = forwardRef<{
           &nbsp;team wins! Keep playing?
         </div>
         <button className="bordered">Leave lobby</button>
-        <button formMethod="dialog" className="bordered">
+        <button
+          className="bordered"
+          onClick={e => {
+            e.preventDefault();
+            dialogRef.current?.close();
+          }}
+        >
           Keep playing
         </button>
       </eventFetcher.Form>

@@ -7,7 +7,6 @@ import {
   type Lobby,
   type Maybe,
   type Event,
-  EventType,
 } from '../common';
 import { root } from './game';
 
@@ -20,7 +19,7 @@ export class CrvpticStore {
     const lobbyStore = new LobbyStore(leaderName);
     const lobbyCode = CrvpticStore.createLobbyCode();
     this.lobbyStores.set(lobbyCode, lobbyStore);
-    lobbyStore.once('DISPOSE', () => {
+    lobbyStore.onceDispose(() => {
       this.lobbyStores.delete(lobbyCode);
     });
     return lobbyCode;
@@ -34,24 +33,16 @@ export class CrvpticStore {
     );
   };
 
-  getLobby = (lobbyCode: LobbyCode, playerName: Maybe<string>) => {
-    this.ensurePlayer(lobbyCode, playerName);
+  getLobby = (lobbyCode: LobbyCode) => {
     const lobby = this.lobbyStores.get(lobbyCode.toUpperCase());
-    invariant(lobby);
+    invariant(lobby, 'lobby not found');
     return lobby;
   };
 
   dispose = () => {
     this.lobbyStores.forEach(lobbyStore => {
-      lobbyStore.emit('DISPOSE');
+      lobbyStore.dispose();
     });
-  };
-
-  send = (event: Event) => {
-    const lobbyCode = event.lobbyCode;
-    const lobbyStore = this.lobbyStores.get(lobbyCode);
-    invariant(lobbyStore);
-    lobbyStore.send(event);
   };
 
   private static usedLobbyCodes = new Set<LobbyCode>();
@@ -70,23 +61,19 @@ export class CrvpticStore {
   };
 }
 
-class LobbyStore extends EventEmitter<{
-  TICK: (lobby: Lobby) => void;
-  DISPOSE: () => void;
-}> {
-  private internalEmitter = new EventEmitter<{
-    [TEventType in EventType]: Event;
+class LobbyStore {
+  private emitter = new EventEmitter<{
+    EVENT: (event: Event) => void;
+    TICK: (lobby: Lobby) => void;
+    DISPOSE: () => void;
   }>();
   private lobby: Lobby;
 
   constructor(leaderName: string) {
-    super();
     this.lobby = createLobby(leaderName);
 
     const channel = stdChannel();
-    Object.values(EventType).forEach(event => {
-      this.internalEmitter.on(event, channel.put);
-    });
+    this.emitter.on('EVENT', channel.put);
 
     const task = runSaga(
       {
@@ -101,8 +88,10 @@ class LobbyStore extends EventEmitter<{
       root,
     );
 
+    task.toPromise().then(this.dispose, this.dispose);
+
     const tick = () => {
-      this.emit('TICK', {
+      this.emitter.emit('TICK', {
         leader: this.lobby.leader,
         // don't send empty teams
         teams: this.lobby.teams.filter(({ players }) => players.length),
@@ -126,27 +115,32 @@ class LobbyStore extends EventEmitter<{
     tick();
     const timer = setInterval(tick, 1000 / TICK_RATE_HZ);
 
-    const reaperTimer = setInterval(() => {
-      const isEmpty = this.lobby.teams.every(team => team.players.length === 0);
-      if (isEmpty) {
-        this.emit('DISPOSE');
-      }
-    }, 1000 * 60);
-
-    this.once('DISPOSE', () => {
+    this.emitter.once('DISPOSE', () => {
       task.cancel();
       channel.close();
       clearInterval(timer);
-      clearInterval(reaperTimer);
       setTimeout(() => {
-        this.internalEmitter.removeAllListeners();
-        this.removeAllListeners();
+        this.emitter.removeAllListeners();
       });
     });
   }
 
+  dispose = () => {
+    this.emitter.emit('DISPOSE');
+  };
+
+  onceDispose = (listener: () => void) => {
+    this.emitter.once('DISPOSE', listener);
+    return () => this.emitter.off('DISPOSE', listener);
+  };
+
+  onTick = (listener: (lobby: Lobby) => void) => {
+    this.emitter.on('TICK', listener);
+    return () => this.emitter.off('TICK', listener);
+  };
+
   send = (event: Event) => {
-    this.internalEmitter.emit(event.type, event);
+    return this.emitter.emit('EVENT', event);
   };
 
   hasPlayer = (playerName: string) => {

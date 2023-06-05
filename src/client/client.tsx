@@ -7,7 +7,7 @@ import {
   RouterProvider,
 } from 'react-router-dom';
 import invariant from 'ts-invariant';
-import { API_PORT, Route, type LobbyCreateResponse } from '../common';
+import { Route, type LobbyCreateResponse, APIRoute } from '../common';
 import { LobbyJoinCreate } from './screens/LobbyJoinCreate';
 import { LobbyProvider } from './components/LobbyLayout';
 import { Layout } from './components/Layout';
@@ -17,6 +17,7 @@ import {
 } from './localStorage';
 import { GameConfigure } from './screens/GameConfigure';
 import { Lobby } from './screens/Lobby';
+import { APIURL } from './utils';
 
 const router = createBrowserRouter([
   {
@@ -35,9 +36,7 @@ const router = createBrowserRouter([
           const playerName = formData.get('playerName');
           invariant(typeof playerName === 'string', 'missing playerName');
           const { lobbyCode } = (await fetch(
-            Object.assign(new URL(request.url, location.href), {
-              port: API_PORT,
-            }),
+            APIURL(request.url, location.href),
             {
               method: request.method,
               body: formData,
@@ -63,36 +62,14 @@ const router = createBrowserRouter([
           return redirect(generatePath(Route.Lobby, { lobbyCode }));
         },
         shouldRevalidate: () => false,
-        loader: async ({ params: { lobbyCode }, request: { signal } }) => {
+        loader: async ({ params: { lobbyCode } }) => {
           invariant(lobbyCode, 'lobbyCode empty or nullish');
           const playerName = readStateFromLocalStorage()?.playerName;
           if (playerName == null) {
             writeStateToLocalStorage({ lobbyCode });
             return redirect(Route.Index);
           }
-          return new Promise<EventSource>((resolve, reject) => {
-            const eventSource = new EventSource(
-              Object.assign(
-                new URL(
-                  generatePath(Route.Lobby, { lobbyCode }),
-                  location.href,
-                ),
-                {
-                  port: API_PORT,
-                  search: String(new URLSearchParams({ playerName })),
-                },
-              ),
-            );
-            eventSource.addEventListener('open', () => resolve(eventSource), {
-              once: true,
-              signal,
-            });
-            eventSource.addEventListener('error', reject, {
-              once: true,
-              signal,
-            });
-            signal?.addEventListener('abort', reject, { once: true });
-          });
+          return null;
         },
         children: [
           {
@@ -104,11 +81,7 @@ const router = createBrowserRouter([
             element: <GameConfigure />,
             shouldRevalidate: () => false,
             loader: () => {
-              return fetch(
-                Object.assign(new URL(Route.Categories, location.href), {
-                  port: API_PORT,
-                }),
-              );
+              return fetch(APIRoute(Route.Categories));
             },
           },
         ],
@@ -119,15 +92,10 @@ const router = createBrowserRouter([
     path: Route.LobbyEvent,
     action: async ({ request }) => {
       const formData = await request.formData();
-      const res = fetch(
-        Object.assign(new URL(request.url, location.href), {
-          port: API_PORT,
-        }),
-        {
-          method: request.method,
-          body: formData,
-        },
-      );
+      const res = fetch(APIURL(request.url, location.href), {
+        method: request.method,
+        body: formData,
+      });
       switch (formData.get('type')) {
         case 'LEAVE_LOBBY':
           return redirect(Route.Index);

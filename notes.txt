@@ -1,16 +1,8 @@
 spdy for http2
 
-load all words up front
-- then send indices to track words
-- meh?
+css in configure game needs work still, finally figured out the mobile stacking
+(it was the grid item forcing 1/3)
 
-store to class
-- remove the interface
-- extend eventemitter?
+css doesn't get copied into build without webpack copy plugin
+- vanilla extract??
 
-do the form data parsing in the express route instead of just before the post/put?
-
-debounce lobby publishes
-
-
-Config doesn't need to be published repeatedly
