@@ -125,3 +125,8 @@ function Root() {
 const rootElement = document.getElementById('root');
 invariant(rootElement != null, 'rootElement nullish');
 createRoot(rootElement).render(<Root />);
+
+function APIURL(...params: ConstructorParameters<typeof window.URL>) {
+  const url = new URL(...params);
+  return new URL(APIRoute(url.pathname as `/${string}`), url.href);
+}

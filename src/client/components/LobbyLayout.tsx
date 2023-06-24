@@ -99,6 +99,19 @@ export function LobbyProvider() {
   > | null>(null);
   const winningTeamColor = lobby == null ? null : getWinningTeam(lobby)?.color;
 
+  // TODO: close the connection
+  // But i guess I should establish it here...
+  // useEffect(() => {
+
+  //   return () => eventSource.close();
+  // }, [eventSource]);
+
+  useEffect(() => {
+    const handler = () => navigate(Route.Index);
+    eventSource.addEventListener('error', handler, { once: true });
+    return () => eventSource.removeEventListener('error', handler);
+  }, [eventSource]);
+
   useEffect(() => {
     const abortController = new AbortController();
     const signal = abortController.signal;
